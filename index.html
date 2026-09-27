@@ -1,0 +1,1371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Throttle Siege</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #0f1024;
+    --panel: #1a1b36;
+    --panel-2: #24264a;
+    --ink: #eef0ff;
+    --muted: #9a9cc4;
+    --amber: #ffb347;
+    --cyan: #5ee0ff;
+    --coral: #ff6b6b;
+    --line: #34376a;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Chakra Petch", system-ui, sans-serif;
+    overflow: hidden;
+    padding-inline: 16px;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .app {
+    height: 100%;
+    box-sizing: border-box;
+    padding-block: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .screen {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--line), 0 20px 60px rgba(0, 0, 0, .5);
+  }
+  canvas { display: block; }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(12, 13, 30, .72);
+    backdrop-filter: blur(2px);
+    padding: 14px;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+  .overlay[hidden] { display: none; }
+  .card {
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: left;
+  }
+  .eyebrow {
+    margin: 0;
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    font-weight: 600;
+  }
+  h1 {
+    margin: 0;
+    font-family: "Bungee", "Chakra Petch", system-ui, sans-serif;
+    font-weight: 400;
+    font-size: clamp(34px, 9vw, 46px);
+    line-height: .95;
+    text-wrap: balance;
+    color: var(--ink);
+    text-shadow: 3px 3px 0 #c2410c, 6px 6px 0 rgba(0,0,0,.35);
+  }
+  h1 span { color: var(--amber); }
+  .keys {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    margin: 0;
+    font-size: 14px;
+    align-items: center;
+  }
+  .keys dt { display: flex; gap: 4px; }
+  .keys dd { margin: 0; color: var(--muted); }
+  kbd {
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 12px;
+    min-width: 22px;
+    text-align: center;
+    padding: 3px 7px;
+    border-radius: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-bottom-width: 3px;
+    color: var(--ink);
+  }
+  .chips {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .chips li { display: flex; align-items: center; gap: 8px; }
+  .chip {
+    flex: none;
+    width: 30px; height: 22px;
+    border-radius: 5px;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 11px;
+    color: #0f1024;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 10px;
+  }
+  .stat b {
+    display: block;
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat small { color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button.primary, button.ghost {
+    font-family: "Bungee", "Chakra Petch", system-ui, sans-serif;
+    font-size: 16px;
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 18px;
+    cursor: pointer;
+  }
+  button.primary {
+    background: var(--amber);
+    color: #1b1206;
+    box-shadow: 0 4px 0 #b45309;
+  }
+  button.primary:active { transform: translateY(2px); box-shadow: 0 2px 0 #b45309; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    font-family: "Chakra Petch", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+  }
+  button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+  .note { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+  .pad {
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex: none;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pad .group { display: flex; gap: 8px; }
+  .pad button {
+    width: 64px; height: 64px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font-family: "Chakra Petch", system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: .06em;
+    touch-action: none;
+  }
+  .pad button.on { background: var(--panel-2); border-color: var(--cyan); }
+  .pad .arrow { font-size: 24px; }
+  .pad .fire { color: var(--cyan); }
+  .pad .msl { color: #ff7ad9; }
+  .pad .jump { color: var(--amber); }
+  @media (hover: hover) and (pointer: fine) {
+    .pad { display: none; }
+  }
+  body.touch .pad { display: flex; }
+  @media (max-width: 380px) {
+    .pad button { width: 56px; height: 56px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <div class="screen" id="screen">
+      <canvas id="game" aria-label="Throttle Siege game"></canvas>
+      <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+    </div>
+  </div>
+  <div class="pad" id="pad">
+    <div class="group">
+      <button class="arrow" data-k="left" aria-label="Steer left">◀</button>
+      <button class="arrow" data-k="right" aria-label="Steer right">▶</button>
+    </div>
+    <div class="group">
+      <button class="jump" data-k="jump">JUMP</button>
+      <button class="fire" data-k="fire">FIRE</button>
+      <button class="msl" data-k="missile">MSL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- constants ----------
+  const W = 420, H = 720;
+  const ROAD_L = 50, ROAD_R = 370, LANES = 4, LANE_W = (ROAD_R - ROAD_L) / LANES;
+  const laneX = i => ROAD_L + LANE_W * (i + 0.5);
+  const LEVEL_TIME = 30;
+  const MISSILE_RELOAD = 15;
+  const JUMP_DUR = 0.8;
+  const BULLET_DMG = 20;
+
+  const TIERS = [
+    { hp: 100,  w: 40, h: 66,  color: '#ff6b6b', dark: '#9e3040', dmg: 15, score: 100,  speed: 1.00, name: 'Scout' },
+    { hp: 200,  w: 48, h: 82,  color: '#ff9f43', dark: '#a0561a', dmg: 25, score: 250,  speed: 0.90, name: 'Hauler' },
+    { hp: 500,  w: 60, h: 104, color: '#b388ff', dark: '#5b3aa0', dmg: 40, score: 700,  speed: 0.78, name: 'Armour' },
+    { hp: 1000, w: 72, h: 126, color: '#ff4f9a', dark: '#7d1e4c', dmg: 60, score: 1600, speed: 0.66, name: 'Juggernaut' },
+  ];
+
+  const BOX = {
+    shot: { color: '#5ee0ff', label: s => '×' + (s.shot + 1) },
+    rate: { color: '#ffd166', label: s => (s.rate + 1) + '/s' },
+    heal: { color: '#6ee7a8', label: () => '+HP' },
+    mcap: { color: '#ff7ad9', label: s => 'M' + (s.mCap + 1), rare: true },
+    mdmg: { color: '#ff5c5c', label: () => '200', rare: true },
+    turret: { color: '#9be15d', label: () => 'TUR' },
+    trate: { color: '#c6f68d', label: s => 'T' + (s.tRate + 1) },
+    tmsl: { color: '#ffe066', label: () => 'TM', rare: true },
+  };
+  const TURRET_HP = 200;
+  const TURRET_FIRE_TIME = 5;   // seconds of firing before overheating
+  const TURRET_COOL_TIME = 2;   // seconds offline while cooling
+  const PASS_DMG = 10;          // 10% of 100 HP when an enemy gets past
+  const CRASH_DMG = 40;         // 40% on a direct hit
+
+  // ---------- canvas setup ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const screenEl = document.getElementById('screen');
+  const stage = document.getElementById('stage');
+  const overlay = document.getElementById('overlay');
+  const card = document.getElementById('card');
+  let scale = 1;
+
+  function resize() {
+    const aw = stage.clientWidth, ah = stage.clientHeight;
+    scale = Math.max(0.3, Math.min(aw / W, ah / H));
+    const cw = Math.floor(W * scale), ch = Math.floor(H * scale);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(cw * dpr);
+    canvas.height = Math.floor(ch * dpr);
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+    screenEl.style.width = cw + 'px';
+    screenEl.style.height = ch + 'px';
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+
+  // ---------- storage ----------
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('throttleSiegeBest') || '0', 10) || 0; } catch (e) {}
+  function saveBest() { try { localStorage.setItem('throttleSiegeBest', String(best)); } catch (e) {} }
+
+  // ---------- audio ----------
+  let ac = null, muted = false;
+  function ensureAudio() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (ac && ac.state === 'suspended') ac.resume();
+  }
+  function tone(freq, dur, type, vol, slide) {
+    if (!ac || muted) return;
+    const t = ac.currentTime;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol || 0.04, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(ac.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(dur, vol, freq) {
+    if (!ac || muted) return;
+    const t = ac.currentTime;
+    const len = Math.floor(ac.sampleRate * dur);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq || 900;
+    const g = ac.createGain(); g.gain.value = vol || 0.12;
+    src.connect(f).connect(g).connect(ac.destination);
+    src.start(t);
+  }
+  function sfx(name) {
+    switch (name) {
+      case 'shot': tone(880, 0.06, 'square', 0.025, -300); break;
+      case 'missile': tone(220, 0.35, 'sawtooth', 0.05, 500); noise(0.3, 0.06, 1600); break;
+      case 'boom': noise(0.35, 0.16, 700); tone(90, 0.3, 'sine', 0.08, -50); break;
+      case 'bigboom': noise(0.7, 0.22, 500); tone(70, 0.6, 'sine', 0.12, -40); break;
+      case 'hurt': tone(160, 0.25, 'sawtooth', 0.07, -100); noise(0.2, 0.1, 1200); break;
+      case 'pickup': tone(660, 0.08, 'square', 0.04); setTimeout(() => tone(990, 0.1, 'square', 0.04), 70); break;
+      case 'rare': [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.12, 'triangle', 0.06), i * 70)); break;
+      case 'level': [392, 523, 659].forEach((f, i) => setTimeout(() => tone(f, 0.16, 'triangle', 0.06), i * 110)); break;
+      case 'jump': tone(300, 0.2, 'triangle', 0.05, 400); break;
+      case 'reload': tone(500, 0.08, 'triangle', 0.04); setTimeout(() => tone(750, 0.1, 'triangle', 0.04), 90); break;
+      case 'empty': tone(120, 0.08, 'square', 0.03); break;
+    }
+  }
+
+  // ---------- input ----------
+  const keys = { left: false, right: false, fire: false };
+  let mode = 'menu'; // menu | play | paused | over
+
+  function tryJump() {
+    if (mode !== 'play') return;
+    const p = S.p;
+    if (p.jumpT <= 0) { p.jumpT = JUMP_DUR; sfx('jump'); }
+  }
+  function tryMissile() {
+    if (mode !== 'play') return;
+    if (S.missiles <= 0) { sfx('empty'); return; }
+    S.missiles--;
+    const side = (S.missileSide = -S.missileSide);
+    S.rockets.push({ x: S.p.x + side * 12, y: S.p.y - 10, a: -Math.PI / 2 + side * 0.35, speed: 180, dmg: S.mDmg, target: null, trail: [] });
+    sfx('missile');
+  }
+
+  window.addEventListener('keydown', e => {
+    const c = e.code;
+    if (mode === 'play' && (c === 'Tab' || c === 'Space' || c.startsWith('Arrow'))) e.preventDefault();
+    if (c === 'ArrowLeft' || c === 'KeyA') keys.left = true;
+    else if (c === 'ArrowRight' || c === 'KeyD') keys.right = true;
+    else if (c === 'KeyW') keys.fire = true;
+    if (e.repeat) return;
+    if (c === 'Tab' || c === 'Space') tryJump();
+    else if (c === 'KeyE') tryMissile();
+    else if (c === 'KeyP' || c === 'Escape') togglePause();
+    else if (c === 'KeyM') { muted = !muted; }
+    else if (c === 'Enter' && (mode === 'menu' || mode === 'over')) { e.preventDefault(); startGame(); }
+  });
+  window.addEventListener('keyup', e => {
+    const c = e.code;
+    if (c === 'ArrowLeft' || c === 'KeyA') keys.left = false;
+    else if (c === 'ArrowRight' || c === 'KeyD') keys.right = false;
+    else if (c === 'KeyW') keys.fire = false;
+  });
+  window.addEventListener('blur', () => { keys.left = keys.right = keys.fire = false; if (mode === 'play') togglePause(); });
+
+  // touch pad
+  window.addEventListener('touchstart', () => document.body.classList.add('touch'), { once: true, passive: true });
+  document.querySelectorAll('.pad button').forEach(btn => {
+    const k = btn.dataset.k;
+    const down = e => {
+      e.preventDefault();
+      ensureAudio();
+      btn.classList.add('on');
+      if (k === 'left' || k === 'right' || k === 'fire') keys[k] = true;
+      else if (k === 'jump') tryJump();
+      else if (k === 'missile') tryMissile();
+      try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    };
+    const up = e => {
+      btn.classList.remove('on');
+      if (k === 'left' || k === 'right' || k === 'fire') keys[k] = false;
+    };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('lostpointercapture', up);
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  });
+
+  // ---------- state ----------
+  let S;
+  function newState() {
+    return {
+      t: 0, level: 1, levelT: 0, score: 0, kills: 0,
+      banner: 2.4, shake: 0, roadOff: 0, sideOff: 0,
+      p: { x: laneX(1) + LANE_W / 2, y: H - 130, w: 26, h: 62, hp: 100, maxHp: 100, jumpT: 0, inv: 0, tilt: 0 },
+      shot: 1, rate: 2, fireCd: 0,
+      mCap: 2, missiles: 2, mDmg: 100, mReload: MISSILE_RELOAD, missileSide: 1,
+      turrets: [], tRate: 2, tMsl: 0,
+      bullets: [], rockets: [], enemies: [], boxes: [], parts: [], floaters: [],
+      spawnT: 1.4,
+    };
+  }
+  S = newState();
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const overlap = (a, b, shrinkA = 0, shrinkB = 0) =>
+    Math.abs(a.x - b.x) < (a.w - shrinkA + b.w - shrinkB) / 2 &&
+    Math.abs(a.y - b.y) < (a.h - shrinkA + b.h - shrinkB) / 2;
+
+  function jumpHeight(p) {
+    if (p.jumpT <= 0) return 0;
+    return Math.sin(Math.PI * (1 - p.jumpT / JUMP_DUR));
+  }
+
+  // difficulty curve
+  function tierWeights(L) {
+    return [
+      Math.max(0.2, 1 - 0.14 * (L - 1)),
+      L >= 2 ? Math.min(0.4, 0.12 * (L - 1)) : 0,
+      L >= 3 ? Math.min(0.32, 0.07 * (L - 2)) : 0,
+      L >= 5 ? Math.min(0.26, 0.05 * (L - 4)) : 0,
+    ];
+  }
+  function pickTier(L) {
+    const w = tierWeights(L);
+    let r = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < w.length; i++) { if ((r -= w[i]) <= 0) return i; }
+    return 0;
+  }
+  function spawnWave() {
+    const L = S.level;
+    let count = 1;
+    if (Math.random() < Math.min(0.6, 0.08 * (L - 1))) count++;
+    if (L >= 5 && Math.random() < Math.min(0.35, 0.05 * (L - 4))) count++;
+    if (L >= 9 && Math.random() < 0.2) count++;
+    const lanes = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+    let placed = 0;
+    for (const lane of lanes) {
+      if (placed >= count) break;
+      const tier = TIERS[pickTier(L)];
+      const blocked = S.enemies.some(e => Math.abs(e.x - laneX(lane)) < LANE_W * 0.8 && e.y - e.h / 2 < tier.h + 30);
+      if (blocked) continue;
+      const weave = L >= 3 && Math.random() < Math.min(0.45, 0.07 * L);
+      S.enemies.push({
+        tier, hp: tier.hp, maxHp: tier.hp, w: tier.w, h: tier.h,
+        x: laneX(lane), tx: laneX(lane), lane,
+        y: -tier.h / 2 - rand(0, 60),
+        vy: (100 + L * 9) * tier.speed * rand(0.9, 1.12),
+        hit: 0, weave, weaveT: rand(1, 2.5),
+      });
+      placed++;
+    }
+  }
+
+  function pickBoxType() {
+    const pool = [];
+    if (S.shot < 4) pool.push(['shot', 26]);
+    if (S.rate < 5) pool.push(['rate', 30]);
+    pool.push(['heal', S.p.hp < S.p.maxHp ? 18 : 6]);
+    if (S.mCap < 5) pool.push(['mcap', 7]);
+    if (S.mDmg < 200) pool.push(['mdmg', 5]);
+    if (S.level >= 5 && S.turrets.length < 2) pool.push(['turret', 14]);
+    if (S.level >= 7 && S.turrets.length > 0) {
+      if (S.tRate < 5) pool.push(['trate', 10]);
+      if (S.tMsl < 2) pool.push(['tmsl', 6]);
+    }
+    let r = Math.random() * pool.reduce((a, b) => a + b[1], 0);
+    for (const [t, w] of pool) { if ((r -= w) <= 0) return t; }
+    return 'heal';
+  }
+  function spawnBox(x, y, type) {
+    S.boxes.push({ type: type || pickBoxType(), x: x ?? laneX(Math.floor(Math.random() * LANES)), y: y ?? -20, w: 30, h: 30, vy: 170, spin: rand(0, 6) });
+  }
+  function applyBox(b) {
+    let txt = '', rare = BOX[b.type].rare;
+    switch (b.type) {
+      case 'shot': S.shot = Math.min(4, S.shot + 1); txt = S.shot + ' SHOTS'; break;
+      case 'rate': S.rate = Math.min(5, S.rate + 1); txt = 'FIRE RATE ' + S.rate + '/s'; break;
+      case 'heal': S.p.hp = Math.min(S.p.maxHp, S.p.hp + 30); txt = '+30 HP'; break;
+      case 'mcap': S.mCap = Math.min(5, S.mCap + 1); S.missiles = Math.min(S.mCap, S.missiles + 1); txt = S.mCap + ' MISSILES'; break;
+      case 'mdmg': S.mDmg = 200; txt = 'MISSILE DMG 200'; break;
+      case 'turret':
+        if (S.turrets.length < 2) {
+          S.turrets.push({ x: S.p.x, y: S.p.y - 80, w: 26, h: 26, hp: TURRET_HP, maxHp: TURRET_HP, heat: 0, cool: 0, fireCd: 0.3, aim: -Math.PI / 2, hit: 0 });
+          txt = 'TURRET DEPLOYED';
+        } else { S.turrets.forEach(t => t.hp = t.maxHp); txt = 'TURRETS REPAIRED'; }
+        break;
+      case 'trate': S.tRate = Math.min(5, S.tRate + 1); txt = 'TURRET ' + S.tRate + '/s'; break;
+      case 'tmsl': S.tMsl = Math.min(2, S.tMsl + 1); txt = 'TURRET MISSILES ×' + S.tMsl; break;
+    }
+    S.floaters.push({ x: S.p.x, y: S.p.y - 50, txt, color: BOX[b.type].color, life: 1.4, max: 1.4, big: true });
+    burst(b.x, b.y, BOX[b.type].color, 14, 160);
+    sfx(rare ? 'rare' : 'pickup');
+  }
+
+  function burst(x, y, color, n, spd, size) {
+    for (let i = 0; i < n && S.parts.length < 500; i++) {
+      const a = Math.random() * Math.PI * 2, v = rand(0.2, 1) * spd;
+      S.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.3, 0.8), max: 0.8, color, size: size || rand(1.5, 3.5) });
+    }
+  }
+  function explode(e, big) {
+    burst(e.x, e.y, e.tier.color, big ? 50 : 26, big ? 320 : 220, big ? 4.5 : 3);
+    burst(e.x, e.y, '#ffd166', big ? 30 : 16, big ? 260 : 180);
+    burst(e.x, e.y, '#ffffff', 8, 120, 2);
+    S.shake = Math.max(S.shake, big ? 12 : 5);
+    sfx(big ? 'bigboom' : 'boom');
+  }
+  function killEnemy(e) {
+    S.score += e.tier.score;
+    S.kills++;
+    const big = e.tier.hp >= 500;
+    explode(e, big);
+    S.floaters.push({ x: e.x, y: e.y, txt: '+' + e.tier.score, color: '#eef0ff', life: 0.9, max: 0.9 });
+    const dropChance = [0.3, 0.45, 0.75, 1][TIERS.indexOf(e.tier)];
+    if (Math.random() < dropChance) spawnBox(e.x, e.y);
+  }
+
+  function hurt(dmg, passX) {
+    S.p.hp -= dmg;
+    if (passX === undefined) {
+      S.p.inv = 1;
+      S.shake = 14;
+      sfx('hurt');
+      S.floaters.push({ x: S.p.x, y: S.p.y - 40, txt: '-' + dmg, color: '#ff6b6b', life: 1, max: 1, big: true });
+    } else {
+      S.shake = Math.max(S.shake, 4);
+      sfx('empty');
+      S.floaters.push({ x: passX, y: H - 60, txt: 'GOT PAST -' + dmg, color: '#ff6b6b', life: 1.1, max: 1.1 });
+    }
+    if (S.p.hp <= 0) {
+      S.p.hp = 0;
+      burst(S.p.x, S.p.y, '#5ee0ff', 60, 300, 4);
+      burst(S.p.x, S.p.y, '#ffd166', 40, 240);
+      sfx('bigboom');
+      mode = 'dying';
+      setTimeout(gameOver, 1100);
+    }
+  }
+
+  // ---------- update ----------
+  function update(dt) {
+    S.t += dt;
+    const L = S.level;
+    const roadSpeed = 330 + L * 14;
+    S.roadOff = (S.roadOff + roadSpeed * dt) % 80;
+    S.sideOff = (S.sideOff + roadSpeed * dt) % 160;
+    if (S.banner > 0) S.banner -= dt;
+    if (S.shake > 0) S.shake = Math.max(0, S.shake - dt * 30);
+
+    const alive = mode === 'play';
+    if (alive) {
+      S.levelT += dt;
+      if (S.levelT >= LEVEL_TIME) {
+        S.levelT -= LEVEL_TIME;
+        S.level++;
+        S.banner = 2.4;
+        sfx('level');
+      }
+    }
+
+    // player
+    const p = S.p;
+    if (alive) {
+      const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      p.x = clamp(p.x + dir * 300 * dt, ROAD_L + p.w / 2 + 6, ROAD_R - p.w / 2 - 6);
+      p.tilt += (dir * 0.22 - p.tilt) * Math.min(1, dt * 10);
+      if (p.jumpT > 0) p.jumpT = Math.max(0, p.jumpT - dt);
+      if (p.inv > 0) p.inv -= dt;
+
+      // gun
+      S.fireCd = Math.max(-0.001, S.fireCd - dt);
+      if (keys.fire && S.fireCd <= 0) {
+        const n = S.shot;
+        for (let i = 0; i < n; i++) {
+          const off = i - (n - 1) / 2;
+          S.bullets.push({ x: p.x + off * 9, y: p.y - 34, vx: off * 70, vy: -760, w: 4, h: 12 });
+        }
+        S.fireCd = 1 / S.rate;
+        sfx('shot');
+      }
+
+      // missile reload: back to full every 15 s
+      if (S.missiles < S.mCap) {
+        S.mReload -= dt;
+        if (S.mReload <= 0) { S.missiles = S.mCap; S.mReload = MISSILE_RELOAD; sfx('reload'); }
+      } else S.mReload = MISSILE_RELOAD;
+
+      // spawns
+      S.spawnT -= dt;
+      if (S.spawnT <= 0) {
+        spawnWave();
+        S.spawnT = Math.max(0.5, 2.0 - L * 0.13) * rand(0.75, 1.25);
+      }
+      // turrets ride ahead of the bike
+      const n = S.turrets.length;
+      S.turrets.forEach((t, i) => {
+        const tx = clamp(p.x + (n === 1 ? 0 : (i === 0 ? -28 : 28)), ROAD_L + 16, ROAD_R - 16);
+        t.x += (tx - t.x) * Math.min(1, dt * 8);
+        t.y += (p.y - 82 - t.y) * Math.min(1, dt * 8);
+        if (t.hit > 0) t.hit -= dt;
+        if (t.cool > 0) {
+          t.cool -= dt;
+          if (t.cool <= 0) { t.cool = 0; t.heat = 0; t.salvo = true; }
+          return;
+        }
+        if (t.salvo === undefined) t.salvo = true;
+        if (t.salvo && S.tMsl > 0) {
+          for (let k = 0; k < S.tMsl; k++) {
+            S.rockets.push({ x: t.x, y: t.y - 8, a: -Math.PI / 2 + (k - (S.tMsl - 1) / 2) * 0.6, speed: 160, dmg: 100, target: null, trail: [], turret: true });
+          }
+          sfx('missile');
+        }
+        t.salvo = false;
+        t.heat += dt;
+        if (t.heat >= TURRET_FIRE_TIME) { t.cool = TURRET_COOL_TIME; return; }
+        // aim at the nearest enemy ahead, within a forward arc
+        let tgt = null, bd = Infinity;
+        for (const e of S.enemies) {
+          if (e.dead || e.y > t.y || e.y < -e.h / 2) continue;
+          const d = Math.hypot(e.x - t.x, e.y - t.y);
+          if (d < bd) { bd = d; tgt = e; }
+        }
+        const want = tgt ? clamp(Math.atan2(tgt.y - t.y, tgt.x - t.x), -Math.PI / 2 - 0.7, -Math.PI / 2 + 0.7) : -Math.PI / 2;
+        t.aim += (want - t.aim) * Math.min(1, dt * 10);
+        t.fireCd -= dt;
+        if (t.fireCd <= 0) {
+          S.bullets.push({ x: t.x + Math.cos(t.aim) * 16, y: t.y + Math.sin(t.aim) * 16, vx: Math.cos(t.aim) * 740, vy: Math.sin(t.aim) * 740, w: 4, h: 10, turret: true });
+          t.fireCd = 1 / S.tRate;
+        }
+      });
+    }
+
+    // bullets
+    for (const b of S.bullets) { b.x += b.vx * dt; b.y += b.vy * dt; }
+    // rockets
+    for (const r of S.rockets) {
+      if (!r.target || r.target.dead) {
+        let bestD = Infinity; r.target = null;
+        for (const e of S.enemies) {
+          if (e.dead || e.y > r.y + 20 || e.y < -e.h) continue;
+          const d = Math.hypot(e.x - r.x, e.y - r.y);
+          if (d < bestD) { bestD = d; r.target = e; }
+        }
+      }
+      r.speed = Math.min(780, r.speed + 1000 * dt);
+      if (r.target) {
+        const want = Math.atan2(r.target.y - r.y, r.target.x - r.x);
+        let da = want - r.a;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        r.a += clamp(da, -6 * dt, 6 * dt);
+      } else {
+        r.a += (-Math.PI / 2 - r.a) * Math.min(1, dt * 4);
+      }
+      r.x += Math.cos(r.a) * r.speed * dt;
+      r.y += Math.sin(r.a) * r.speed * dt;
+      r.trail.push({ x: r.x, y: r.y });
+      if (r.trail.length > 14) r.trail.shift();
+      if (Math.random() < 0.7) S.parts.push({ x: r.x, y: r.y, vx: rand(-20, 20), vy: rand(40, 90), life: 0.4, max: 0.4, color: '#ffb347', size: 2.2 });
+    }
+
+    // enemies
+    for (const e of S.enemies) {
+      e.y += e.vy * dt;
+      if (e.hit > 0) e.hit -= dt;
+      if (e.weave) {
+        e.weaveT -= dt;
+        if (e.weaveT <= 0) {
+          const nl = clamp(e.lane + (Math.random() < 0.5 ? -1 : 1), 0, LANES - 1);
+          const free = !S.enemies.some(o => o !== e && Math.abs(o.x - laneX(nl)) < LANE_W * 0.7 && Math.abs(o.y - e.y) < (o.h + e.h) / 2 + 20);
+          if (free) { e.lane = nl; e.tx = laneX(nl); }
+          e.weaveT = rand(1.2, 2.6);
+        }
+        e.x += clamp(e.tx - e.x, -70 * dt, 70 * dt);
+      }
+    }
+    // keep vehicles in the same lane from overlapping
+    for (const e of S.enemies) {
+      for (const o of S.enemies) {
+        if (o === e || Math.abs(o.x - e.x) > (o.w + e.w) / 2 - 4) continue;
+        if (o.y > e.y) {
+          const minGap = (o.h + e.h) / 2 + 8;
+          if (o.y - e.y < minGap) { e.y = o.y - minGap; e.vy = Math.min(e.vy, o.vy); }
+        }
+      }
+    }
+
+    // bullet hits
+    for (const b of S.bullets) {
+      if (b.dead) continue;
+      for (const e of S.enemies) {
+        if (e.dead) continue;
+        if (Math.abs(b.x - e.x) < e.w / 2 && Math.abs(b.y - e.y) < e.h / 2) {
+          b.dead = true;
+          e.hp -= BULLET_DMG; e.hit = 0.07;
+          burst(b.x, b.y, '#bff4ff', 4, 120, 1.6);
+          if (e.hp <= 0 && !e.dead) { e.dead = true; killEnemy(e); }
+          break;
+        }
+      }
+    }
+    // rocket hits
+    for (const r of S.rockets) {
+      if (r.dead) continue;
+      for (const e of S.enemies) {
+        if (e.dead) continue;
+        if (Math.abs(r.x - e.x) < e.w / 2 + 4 && Math.abs(r.y - e.y) < e.h / 2 + 4) {
+          r.dead = true;
+          e.hp -= r.dmg; e.hit = 0.12;
+          burst(r.x, r.y, '#ffb347', 24, 240, 3);
+          burst(r.x, r.y, '#ffffff', 10, 160, 2);
+          S.shake = Math.max(S.shake, 6);
+          S.floaters.push({ x: r.x, y: r.y - 10, txt: '-' + r.dmg, color: '#ffb347', life: 0.8, max: 0.8 });
+          sfx('boom');
+          if (e.hp <= 0 && !e.dead) { e.dead = true; killEnemy(e); }
+          break;
+        }
+      }
+    }
+
+    // turret collisions: turrets sit in front of the bike and take direct hits first
+    if (alive) {
+      for (const t of S.turrets) {
+        for (const e of S.enemies) {
+          if (e.dead || t.hp <= 0) continue;
+          if (overlap(t, e, 0, 6)) {
+            e.dead = true;
+            explode(e, e.tier.hp >= 500);
+            const dmg = Math.round(t.maxHp * 0.4);
+            t.hp -= dmg; t.hit = 0.15;
+            S.floaters.push({ x: t.x, y: t.y - 20, txt: '-' + dmg, color: '#9be15d', life: 0.9, max: 0.9 });
+            if (t.hp <= 0) {
+              burst(t.x, t.y, '#9be15d', 30, 220, 3);
+              S.floaters.push({ x: t.x, y: t.y, txt: 'TURRET LOST', color: '#9be15d', life: 1.2, max: 1.2, big: true });
+            }
+          }
+        }
+      }
+      S.turrets = S.turrets.filter(t => t.hp > 0);
+    }
+
+    // enemies that get past the bike cost 10% health
+    if (alive) {
+      for (const e of S.enemies) {
+        if (e.dead || e.passed) continue;
+        if (e.y - e.h / 2 > p.y + p.h / 2) {
+          e.passed = true;
+          hurt(PASS_DMG, e.x);
+          if (mode !== 'play') break;
+        }
+      }
+    }
+
+    // player collisions
+    if (alive && mode === 'play') {
+      const air = jumpHeight(p) > 0.28;
+      const hb = { x: p.x, y: p.y, w: 20, h: 50 };
+      for (const e of S.enemies) {
+        if (e.dead || air || p.inv > 0) continue;
+        if (overlap(hb, e, 0, 8)) {
+          e.dead = true;
+          e.passed = true;
+          explode(e, e.tier.hp >= 500);
+          hurt(CRASH_DMG);
+          if (mode !== 'play') break;
+        }
+      }
+      for (const b of S.boxes) {
+        if (!b.dead && overlap({ x: p.x, y: p.y, w: 34, h: 62 }, b)) { b.dead = true; applyBox(b); }
+      }
+    }
+
+    // boxes
+    for (const b of S.boxes) { b.y += b.vy * dt; b.spin += dt * 2; }
+
+    // particles & floaters
+    for (const q of S.parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.94; q.vy *= 0.94; q.life -= dt; }
+    for (const f of S.floaters) { f.y -= 40 * dt; f.life -= dt; }
+
+    // cleanup
+    S.bullets = S.bullets.filter(b => !b.dead && b.y > -20 && b.x > 0 && b.x < W);
+    S.rockets = S.rockets.filter(r => !r.dead && r.y > -40 && r.y < H + 40 && r.x > -40 && r.x < W + 40);
+    S.enemies = S.enemies.filter(e => !e.dead && e.y - e.h / 2 < H + 10);
+    S.boxes = S.boxes.filter(b => !b.dead && b.y < H + 30);
+    S.parts = S.parts.filter(q => q.life > 0);
+    S.floaters = S.floaters.filter(f => f.life > 0);
+  }
+
+  // ---------- drawing ----------
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawRoad() {
+    // verge
+    ctx.fillStyle = '#121430';
+    ctx.fillRect(0, 0, W, H);
+    // verge texture stripes
+    ctx.fillStyle = '#171a3a';
+    for (let y = -160 + S.sideOff; y < H; y += 160) {
+      ctx.fillRect(0, y, ROAD_L - 10, 70);
+      ctx.fillRect(ROAD_R + 10, y + 80, W - ROAD_R - 10, 70);
+    }
+    // street lamps
+    for (let y = -160 + S.sideOff; y < H + 40; y += 160) {
+      for (const side of [0, 1]) {
+        const x = side ? ROAD_R + 22 : ROAD_L - 22;
+        const yy = y + (side ? 80 : 0);
+        const g = ctx.createRadialGradient(x, yy, 0, x, yy, 60);
+        g.addColorStop(0, 'rgba(255,179,71,.28)');
+        g.addColorStop(1, 'rgba(255,179,71,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 60, yy - 60, 120, 120);
+        ctx.fillStyle = '#ffd9a0';
+        ctx.beginPath(); ctx.arc(x, yy, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // tarmac
+    ctx.fillStyle = '#25273f';
+    ctx.fillRect(ROAD_L, 0, ROAD_R - ROAD_L, H);
+    // rumble strips
+    for (let y = -80 + S.roadOff * 1; y < H; y += 40) {
+      const alt = Math.floor((y - S.roadOff) / 40) % 2 === 0;
+      ctx.fillStyle = alt ? '#ff6b6b' : '#e9ebff';
+      ctx.fillRect(ROAD_L - 8, y, 8, 40);
+      ctx.fillRect(ROAD_R, y, 8, 40);
+    }
+    // edge lines
+    ctx.fillStyle = '#ffb347';
+    ctx.fillRect(ROAD_L + 4, 0, 3, H);
+    ctx.fillRect(ROAD_R - 7, 0, 3, H);
+    // lane dashes
+    ctx.fillStyle = 'rgba(233,235,255,.55)';
+    for (let i = 1; i < LANES; i++) {
+      const x = ROAD_L + LANE_W * i - 2;
+      for (let y = -80 + S.roadOff; y < H; y += 80) ctx.fillRect(x, y, 4, 38);
+    }
+  }
+
+  function drawBike(p) {
+    const h = jumpHeight(p);
+    const s = 1 + 0.38 * h;
+    // shadow
+    ctx.save();
+    ctx.translate(p.x + 14 * h, p.y + 10 + 6 * h);
+    ctx.fillStyle = `rgba(0,0,0,${0.45 - 0.2 * h})`;
+    ctx.beginPath(); ctx.ellipse(0, 0, 14 * (1 - 0.2 * h), 32 * (1 - 0.2 * h), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(p.x, p.y - 22 * h);
+    ctx.rotate(p.tilt);
+    ctx.scale(s, s);
+    if (p.inv > 0 && Math.floor(p.inv * 14) % 2 === 0) ctx.globalAlpha = 0.35;
+
+    // headlight cone
+    const g = ctx.createLinearGradient(0, -30, 0, -200);
+    g.addColorStop(0, 'rgba(255,235,170,.22)');
+    g.addColorStop(1, 'rgba(255,235,170,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(-6, -30); ctx.lineTo(-48, -200); ctx.lineTo(48, -200); ctx.lineTo(6, -30); ctx.fill();
+
+    // tyres
+    ctx.fillStyle = '#0a0b18';
+    rr(-5, 14, 10, 20, 4); ctx.fill();
+    rr(-4, -33, 8, 18, 4); ctx.fill();
+    // body
+    ctx.fillStyle = '#5ee0ff';
+    ctx.beginPath();
+    ctx.moveTo(0, -24); ctx.lineTo(9, -12); ctx.lineTo(10, 12); ctx.lineTo(5, 22); ctx.lineTo(-5, 22); ctx.lineTo(-10, 12); ctx.lineTo(-9, -12);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2aa9d6';
+    ctx.fillRect(-3, -20, 6, 36);
+    // handlebar
+    ctx.strokeStyle = '#dfe3ff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-15, -14); ctx.lineTo(15, -14); ctx.stroke();
+    // rider
+    ctx.fillStyle = '#1d2656';
+    ctx.beginPath(); ctx.ellipse(0, 2, 10, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#eef0ff';
+    ctx.beginPath(); ctx.arc(0, -4, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5ee0ff';
+    ctx.fillRect(-5, -9, 10, 3);
+    // tail light
+    ctx.fillStyle = '#ff4d5e';
+    ctx.fillRect(-4, 22, 8, 3);
+    ctx.restore();
+  }
+
+  function drawTurret(t) {
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.ellipse(5, 9, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+    // base
+    const hot = t.cool > 0;
+    ctx.fillStyle = '#1f3a1a';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + Math.PI / 8;
+      ctx.lineTo(Math.cos(a) * 14, Math.sin(a) * 14);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = t.hit > 0 ? '#ffffff' : '#9be15d';
+    ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+    // barrel
+    ctx.save();
+    ctx.rotate(t.aim + Math.PI / 2);
+    ctx.fillStyle = hot ? '#ff5c3a' : '#e6ffd0';
+    ctx.fillRect(-2.5, -20, 5, 14);
+    ctx.restore();
+    ctx.fillStyle = '#1f3a1a';
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+    // hp bar
+    ctx.fillStyle = 'rgba(10,11,26,.85)';
+    rr(-16, -26, 32, 5, 2); ctx.fill();
+    ctx.fillStyle = '#9be15d';
+    rr(-15.5, -25.5, 31 * t.hp / t.maxHp, 4, 2); ctx.fill();
+    // heat bar
+    ctx.fillStyle = 'rgba(10,11,26,.85)';
+    rr(-16, 18, 32, 5, 2); ctx.fill();
+    if (hot) {
+      ctx.fillStyle = Math.floor(S.t * 8) % 2 ? '#ff5c3a' : '#ffb347';
+      rr(-15.5, 18.5, 31 * (t.cool / TURRET_COOL_TIME), 4, 2); ctx.fill();
+      ctx.fillStyle = '#ff5c3a';
+      ctx.font = '700 8px "Chakra Petch", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText('OVERHEAT', 0, 25);
+    } else {
+      ctx.fillStyle = '#ffb347';
+      rr(-15.5, 18.5, 31 * Math.min(1, t.heat / TURRET_FIRE_TIME), 4, 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawEnemy(e) {
+    const t = e.tier, x = e.x - e.w / 2, y = e.y - e.h / 2;
+    const idx = TIERS.indexOf(t);
+    ctx.save();
+    // headlight glow toward player
+    const g = ctx.createLinearGradient(0, e.y + e.h / 2, 0, e.y + e.h / 2 + 90);
+    g.addColorStop(0, 'rgba(255,240,190,.18)');
+    g.addColorStop(1, 'rgba(255,240,190,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(e.x - e.w * 0.35, e.y + e.h / 2);
+    ctx.lineTo(e.x - e.w * 0.7, e.y + e.h / 2 + 90);
+    ctx.lineTo(e.x + e.w * 0.7, e.y + e.h / 2 + 90);
+    ctx.lineTo(e.x + e.w * 0.35, e.y + e.h / 2);
+    ctx.fill();
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    rr(x + 4, y + 6, e.w, e.h, 8); ctx.fill();
+
+    if (idx === 3) {
+      // treads
+      ctx.fillStyle = '#0d0e1c';
+      rr(x - 4, y + 4, 12, e.h - 8, 4); ctx.fill();
+      rr(x + e.w - 8, y + 4, 12, e.h - 8, 4); ctx.fill();
+      ctx.fillStyle = '#34365a';
+      for (let ty = y + 8 + ((S.t * 60) % 10); ty < y + e.h - 8; ty += 10) {
+        ctx.fillRect(x - 3, ty, 10, 2); ctx.fillRect(x + e.w - 7, ty, 10, 2);
+      }
+    }
+    // body
+    ctx.fillStyle = t.color;
+    rr(x, y, e.w, e.h, idx === 3 ? 6 : 10); ctx.fill();
+    ctx.fillStyle = t.dark;
+    if (idx < 2) {
+      // roof + windscreen facing the player
+      rr(x + 6, y + e.h * 0.28, e.w - 12, e.h * 0.4, 6); ctx.fill();
+      ctx.fillStyle = '#1a1c38';
+      rr(x + 7, y + e.h * 0.62, e.w - 14, e.h * 0.12, 3); ctx.fill();
+      if (idx === 1) { ctx.fillStyle = t.dark; ctx.fillRect(x + 4, y + 4, e.w - 8, e.h * 0.2); }
+    } else if (idx === 2) {
+      for (let i = 0; i < 4; i++) ctx.fillRect(x + 6, y + 10 + i * (e.h - 30) / 4, e.w - 12, 6);
+      ctx.fillStyle = '#1a1c38';
+      rr(x + 10, y + e.h * 0.74, e.w - 20, 8, 2); ctx.fill();
+    } else {
+      rr(x + 10, y + 12, e.w - 20, e.h - 24, 6); ctx.fill();
+      ctx.fillStyle = '#2c1024';
+      ctx.beginPath(); ctx.arc(e.x, e.y, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = t.color;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2c1024';
+      ctx.fillRect(e.x - 3, e.y + 8, 6, e.h / 2 + 4);
+    }
+    // headlights
+    ctx.fillStyle = '#fff4c2';
+    ctx.fillRect(x + 4, y + e.h - 6, 9, 4);
+    ctx.fillRect(x + e.w - 13, y + e.h - 6, 9, 4);
+    // hit flash
+    if (e.hit > 0) {
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#ffffff';
+      rr(x, y, e.w, e.h, 10); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // hp bar
+    const bw = Math.max(44, e.w), bx = e.x - bw / 2, by = y - 16;
+    ctx.fillStyle = 'rgba(10,11,26,.85)';
+    rr(bx, by, bw, 11, 3); ctx.fill();
+    ctx.fillStyle = t.color;
+    rr(bx + 1, by + 1, Math.max(0, (bw - 2) * e.hp / e.maxHp), 9, 2); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 9px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(Math.ceil(e.hp), e.x, by + 6);
+    ctx.restore();
+  }
+
+  function drawBox(b) {
+    const def = BOX[b.type];
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    if (def.rare) {
+      const pulse = 0.5 + 0.5 * Math.sin(S.t * 8);
+      ctx.fillStyle = `rgba(255,122,217,${0.15 + 0.2 * pulse})`;
+      ctx.beginPath(); ctx.arc(0, 0, 26 + 4 * pulse, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.rotate(Math.sin(b.spin) * 0.15);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    rr(-13, -11, 30, 30, 6); ctx.fill();
+    ctx.fillStyle = def.color;
+    rr(-15, -15, 30, 30, 6); ctx.fill();
+    ctx.strokeStyle = def.rare ? '#ffffff' : 'rgba(15,16,36,.5)';
+    ctx.lineWidth = 2;
+    rr(-15, -15, 30, 30, 6); ctx.stroke();
+    ctx.fillStyle = '#0f1024';
+    ctx.font = '700 12px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(def.label(S), 0, 1);
+    ctx.restore();
+  }
+
+  function drawHUD() {
+    const p = S.p;
+    // top panel
+    ctx.fillStyle = 'rgba(12,13,30,.82)';
+    ctx.fillRect(0, 0, W, 56);
+    ctx.fillStyle = '#34376a';
+    ctx.fillRect(0, 56, W, 1);
+
+    ctx.textBaseline = 'alphabetic';
+    // HP
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9a9cc4';
+    ctx.font = '600 10px "Chakra Petch", sans-serif';
+    ctx.fillText('HEALTH', 14, 20);
+    ctx.fillStyle = '#24264a';
+    rr(14, 26, 118, 14, 4); ctx.fill();
+    const hpR = p.hp / p.maxHp;
+    ctx.fillStyle = hpR > 0.5 ? '#6ee7a8' : hpR > 0.25 ? '#ffd166' : '#ff6b6b';
+    rr(15, 27, Math.max(0, 116 * hpR), 12, 3); ctx.fill();
+    ctx.fillStyle = '#0f1024';
+    ctx.font = '700 10px "Chakra Petch", sans-serif';
+    ctx.fillText(Math.ceil(p.hp) + ' / ' + p.maxHp, 20, 37);
+
+    // level
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffb347';
+    ctx.font = '18px "Bungee", sans-serif';
+    ctx.fillText('LVL ' + S.level, W / 2, 26);
+    ctx.fillStyle = '#24264a';
+    rr(W / 2 - 50, 34, 100, 6, 3); ctx.fill();
+    ctx.fillStyle = '#ffb347';
+    rr(W / 2 - 50, 34, 100 * (S.levelT / LEVEL_TIME), 6, 3); ctx.fill();
+    ctx.fillStyle = '#9a9cc4';
+    ctx.font = '600 9px "Chakra Petch", sans-serif';
+    ctx.fillText(Math.ceil(LEVEL_TIME - S.levelT) + 's left', W / 2, 51);
+
+    // score
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#9a9cc4';
+    ctx.font = '600 10px "Chakra Petch", sans-serif';
+    ctx.fillText('SCORE', W - 14, 20);
+    ctx.fillStyle = '#eef0ff';
+    ctx.font = '700 20px "Chakra Petch", sans-serif';
+    ctx.fillText(S.score.toLocaleString('en-GB'), W - 14, 42);
+
+    // weapon panel
+    const py = H - 44;
+    ctx.fillStyle = 'rgba(12,13,30,.82)';
+    ctx.fillRect(0, py, W, 44);
+    ctx.fillStyle = '#34376a';
+    ctx.fillRect(0, py, W, 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '600 9px "Chakra Petch", sans-serif';
+    ctx.fillStyle = '#9a9cc4';
+    ctx.fillText('GUN', 14, py + 14);
+    ctx.fillStyle = '#5ee0ff';
+    ctx.font = '700 15px "Chakra Petch", sans-serif';
+    ctx.fillText('×' + S.shot, 14, py + 30);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(S.rate + '/s', 46, py + 30);
+    ctx.fillStyle = '#9a9cc4';
+    ctx.font = '600 9px "Chakra Petch", sans-serif';
+    ctx.fillText('20 DMG', 88, py + 30);
+
+    // missiles
+    const mx = 170;
+    ctx.fillStyle = '#9a9cc4';
+    ctx.fillText('MISSILES · ' + S.mDmg + ' DMG', mx, py + 14);
+    for (let i = 0; i < S.mCap; i++) {
+      const on = i < S.missiles;
+      ctx.fillStyle = on ? (S.mDmg > 100 ? '#ff5c5c' : '#ff7ad9') : '#24264a';
+      rr(mx + i * 18, py + 22, 12, 16, 3); ctx.fill();
+      if (on) { ctx.fillStyle = '#ffffff'; ctx.fillRect(mx + i * 18 + 4, py + 24, 4, 4); }
+    }
+    if (S.missiles < S.mCap) {
+      ctx.fillStyle = '#eef0ff';
+      ctx.font = '700 11px "Chakra Petch", sans-serif';
+      ctx.fillText('reload ' + Math.ceil(S.mReload) + 's', mx + S.mCap * 18 + 6, py + 30);
+    }
+
+    ctx.textAlign = 'right';
+    if (S.turrets.length) {
+      ctx.fillStyle = '#9a9cc4';
+      ctx.font = '600 9px "Chakra Petch", sans-serif';
+      ctx.fillText('TURRETS', W - 12, py + 14);
+      ctx.fillStyle = '#9be15d';
+      ctx.font = '700 12px "Chakra Petch", sans-serif';
+      ctx.fillText(S.turrets.length + ' · ' + S.tRate + '/s' + (S.tMsl ? ' · M' + S.tMsl : ''), W - 12, py + 30);
+    } else {
+      ctx.fillStyle = muted ? '#ff6b6b' : '#5b5e8e';
+      ctx.font = '600 9px "Chakra Petch", sans-serif';
+      ctx.fillText(muted ? 'MUTED (M)' : 'P pause · M mute', W - 12, py + 30);
+    }
+  }
+
+  function unlockText(L) {
+    if (L === 2) return 'Haulers join · 200 HP';
+    if (L === 3) return 'Armour joins · 500 HP';
+    if (L === 5) return 'Juggernauts (1000 HP) · turret boxes unlocked';
+    if (L === 7) return 'Turret upgrades: fire rate + missiles';
+    return 'More traffic, faster';
+  }
+
+  function draw() {
+    ctx.save();
+    if (S.shake > 0) ctx.translate(rand(-S.shake, S.shake) * 0.5, rand(-S.shake, S.shake) * 0.5);
+    drawRoad();
+    for (const b of S.boxes) drawBox(b);
+    for (const e of S.enemies) drawEnemy(e);
+    // bullets
+    ctx.fillStyle = '#bff4ff';
+    for (const b of S.bullets) {
+      if (b.turret) {
+        ctx.fillStyle = 'rgba(155,225,93,.4)';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#efffe0';
+        ctx.beginPath(); ctx.arc(b.x, b.y, 2.2, 0, Math.PI * 2); ctx.fill();
+        continue;
+      }
+      ctx.fillStyle = 'rgba(94,224,255,.35)';
+      ctx.fillRect(b.x - 3, b.y - 2, 6, 16);
+      ctx.fillStyle = '#e9fbff';
+      ctx.fillRect(b.x - 1.5, b.y, 3, 12);
+    }
+    // rockets
+    for (const r of S.rockets) {
+      ctx.strokeStyle = 'rgba(255,179,71,.45)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      r.trail.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      ctx.rotate(r.a + Math.PI / 2);
+      ctx.fillStyle = r.dmg > 100 ? '#ff5c5c' : '#ff7ad9';
+      rr(-3.5, -10, 7, 18, 3); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-2, -10, 4, 4);
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath(); ctx.moveTo(-3, 8); ctx.lineTo(0, 15 + Math.random() * 5); ctx.lineTo(3, 8); ctx.fill();
+      ctx.restore();
+    }
+    for (const t of S.turrets) drawTurret(t);
+    if (mode !== 'dying' && mode !== 'over') drawBike(S.p);
+    // particles
+    for (const q of S.parts) {
+      ctx.globalAlpha = Math.max(0, q.life / q.max);
+      ctx.fillStyle = q.color;
+      ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
+    }
+    ctx.globalAlpha = 1;
+    // floaters
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const f of S.floaters) {
+      ctx.globalAlpha = Math.max(0, f.life / f.max);
+      ctx.fillStyle = f.color;
+      ctx.font = f.big ? '700 16px "Chakra Petch", sans-serif' : '700 12px "Chakra Petch", sans-serif';
+      ctx.fillText(f.txt, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    if (mode !== 'menu') drawHUD();
+
+    // level banner
+    if (mode === 'play' && S.banner > 0) {
+      const a = Math.min(1, S.banner / 0.5, (2.4 - S.banner) / 0.3 + 0.001);
+      ctx.globalAlpha = clamp(a, 0, 1);
+      ctx.fillStyle = 'rgba(12,13,30,.75)';
+      ctx.fillRect(0, H / 2 - 60, W, 104);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#c2410c';
+      ctx.font = '44px "Bungee", sans-serif';
+      ctx.fillText('LEVEL ' + S.level, W / 2 + 3, H / 2 - 15);
+      ctx.fillStyle = '#ffb347';
+      ctx.fillText('LEVEL ' + S.level, W / 2, H / 2 - 18);
+      ctx.fillStyle = '#eef0ff';
+      ctx.font = '600 14px "Chakra Petch", sans-serif';
+      ctx.fillText(S.level === 1 ? 'Survive 30 seconds · Scouts ahead' : unlockText(S.level), W / 2, H / 2 + 24);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---------- screens ----------
+  const chip = (c, t) => `<span class="chip" style="background:${c}">${t}</span>`;
+  function showMenu() {
+    mode = 'menu';
+    card.innerHTML = `
+      <p class="eyebrow">Night run · 30-second levels</p>
+      <h1>Throttle<br><span>Siege</span></h1>
+      <dl class="keys">
+        <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Steer</dd>
+        <dt><kbd>Tab</kbd></dt><dd>Jump over traffic</dd>
+        <dt><kbd>W</kbd></dt><dd>Fire gun, hold for auto (20 dmg)</dd>
+        <dt><kbd>E</kbd></dt><dd>Homing missile (100 dmg)</dd>
+        <dt><kbd>P</kbd></dt><dd>Pause</dd>
+      </dl>
+      <ul class="chips">
+        <li>${chip('#5ee0ff', '×2')} More bullets</li>
+        <li>${chip('#ffd166', '2/s')} Fire rate</li>
+        <li>${chip('#ff7ad9', 'M3')} Missile slots</li>
+        <li>${chip('#ff5c5c', '200')} Missile dmg</li>
+        <li>${chip('#6ee7a8', '+HP')} Repair 30</li>
+        <li>${chip('#9be15d', 'TUR')} Turret, level 5+</li>
+      </ul>
+      <div class="row">
+        <button class="primary" id="startBtn">Start ride</button>
+        <button class="ghost" id="muteBtn">Sound: ${muted ? 'off' : 'on'}</button>
+      </div>
+      <p class="note">Boxes drop from destroyed enemies. Each enemy that gets past costs 10 HP, a crash costs 40. Missiles refill every 15 s.${best ? ' Best score ' + best.toLocaleString('en-GB') + '.' : ''}</p>`;
+    overlay.hidden = false;
+    document.getElementById('startBtn').onclick = startGame;
+    document.getElementById('muteBtn').onclick = e => { muted = !muted; e.target.textContent = 'Sound: ' + (muted ? 'off' : 'on'); };
+    document.getElementById('startBtn').focus({ preventScroll: true });
+  }
+  function startGame() {
+    ensureAudio();
+    S = newState();
+    mode = 'play';
+    overlay.hidden = true;
+    canvas.focus && canvas.focus();
+    sfx('level');
+  }
+  function togglePause() {
+    if (mode === 'play') {
+      mode = 'paused';
+      card.innerHTML = `
+        <p class="eyebrow">Level ${S.level} · ${Math.ceil(LEVEL_TIME - S.levelT)}s left</p>
+        <h1>Paused</h1>
+        <div class="row"><button class="primary" id="resumeBtn">Resume</button><button class="ghost" id="quitBtn">Quit to menu</button></div>
+        <p class="note">Press P or Esc to resume.</p>`;
+      overlay.hidden = false;
+      document.getElementById('resumeBtn').onclick = togglePause;
+      document.getElementById('quitBtn').onclick = () => { S = newState(); showMenu(); };
+      document.getElementById('resumeBtn').focus({ preventScroll: true });
+    } else if (mode === 'paused') {
+      mode = 'play';
+      overlay.hidden = true;
+      last = performance.now();
+    }
+  }
+  function gameOver() {
+    mode = 'over';
+    const isBest = S.score > best;
+    if (isBest) { best = S.score; saveBest(); }
+    card.innerHTML = `
+      <p class="eyebrow">${isBest ? 'New best score' : 'Bike destroyed'}</p>
+      <h1>Wrecked</h1>
+      <div class="stats">
+        <div class="stat"><small>Level</small><b>${S.level}</b></div>
+        <div class="stat"><small>Kills</small><b>${S.kills}</b></div>
+        <div class="stat"><small>Score</small><b>${S.score.toLocaleString('en-GB')}</b></div>
+      </div>
+      <div class="row"><button class="primary" id="againBtn">Ride again</button><button class="ghost" id="menuBtn">Menu</button></div>
+      <p class="note">Best ${best.toLocaleString('en-GB')} · Press Enter to restart.</p>`;
+    overlay.hidden = false;
+    document.getElementById('againBtn').onclick = startGame;
+    document.getElementById('menuBtn').onclick = () => { S = newState(); showMenu(); };
+    document.getElementById('againBtn').focus({ preventScroll: true });
+  }
+
+  // ---------- attract mode: a little traffic behind the menu ----------
+  function seedMenuScene() {
+    S = newState();
+    S.enemies.push(
+      { tier: TIERS[0], hp: 60, maxHp: 100, w: 40, h: 66, x: laneX(0), tx: laneX(0), lane: 0, y: 190, vy: 0, hit: 0 },
+      { tier: TIERS[2], hp: 500, maxHp: 500, w: 60, h: 104, x: laneX(2), tx: laneX(2), lane: 2, y: 250, vy: 0, hit: 0 },
+      { tier: TIERS[1], hp: 200, maxHp: 200, w: 48, h: 82, x: laneX(3), tx: laneX(3), lane: 3, y: 420, vy: 0, hit: 0 }
+    );
+    spawnBox(laneX(1), 380, 'shot');
+  }
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (mode === 'play' || mode === 'dying') update(dt);
+    else if (mode === 'menu') {
+      S.roadOff = (S.roadOff + 330 * dt) % 80;
+      S.sideOff = (S.sideOff + 330 * dt) % 160;
+      S.t += dt;
+      for (const b of S.boxes) b.spin += dt * 2;
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') togglePause(); });
+
+  seedMenuScene();
+  showMenu();
+  requestAnimationFrame(frame);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => draw());
+})();
+</script>
+</body>
+</html>
