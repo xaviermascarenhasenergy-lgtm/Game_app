@@ -192,9 +192,16 @@
     flex: none;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .pad .group { display: flex; gap: 8px; }
+  .pad .group { display: grid; gap: 6px; }
+  .pad .dpad { grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 52px); }
+  .pad .dpad [data-k="up"] { grid-column: 2; }
+  .pad .dpad [data-k="left"] { grid-column: 1; grid-row: 2; }
+  .pad .dpad [data-k="down"] { grid-column: 2; grid-row: 2; }
+  .pad .dpad [data-k="right"] { grid-column: 3; grid-row: 2; }
+  .pad .acts { grid-template-columns: repeat(2, 64px); grid-template-rows: repeat(2, 52px); }
+  .pad .shop { color: #8fb8ff; }
   .pad button {
-    width: 64px; height: 64px;
+    width: 100%; height: 100%;
     border-radius: 16px;
     border: 1px solid var(--line);
     background: var(--panel);
@@ -215,8 +222,34 @@
   }
   body.touch .pad { display: flex; }
   @media (max-width: 380px) {
-    .pad button { width: 56px; height: 56px; }
+    .pad .dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 46px); }
+    .pad .acts { grid-template-columns: repeat(2, 56px); grid-template-rows: repeat(2, 46px); }
   }
+  .shoplist { display: grid; gap: 6px; }
+  .shopitem {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .shopitem:hover:not(:disabled) { border-color: var(--amber); }
+  .shopitem:disabled { opacity: .45; cursor: default; }
+  .shopitem .n { font-weight: 700; color: var(--muted); font-size: 12px; }
+  .shopitem .t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .shopitem .t b { font-size: 13.5px; }
+  .shopitem .t small { font-size: 11.5px; color: var(--muted); }
+  .shopitem .c { font-weight: 700; font-size: 13px; color: var(--amber); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .wallet { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0; }
+  .wallet small { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .1em; }
 </style>
 </head>
 <body>
@@ -229,14 +262,17 @@
     </div>
   </div>
   <div class="pad" id="pad">
-    <div class="group">
+    <div class="group dpad">
+      <button class="arrow" data-k="up" aria-label="Move forward">▲</button>
       <button class="arrow" data-k="left" aria-label="Steer left">◀</button>
+      <button class="arrow" data-k="down" aria-label="Move back">▼</button>
       <button class="arrow" data-k="right" aria-label="Steer right">▶</button>
     </div>
-    <div class="group">
+    <div class="group acts">
       <button class="jump" data-k="jump">JUMP</button>
       <button class="fire" data-k="fire">FIRE</button>
       <button class="msl" data-k="missile">MSL</button>
+      <button class="shop" data-k="shop">SHOP</button>
     </div>
   </div>
 </div>
@@ -253,16 +289,26 @@
   const BULLET_DMG = 20;
 
   const TIERS = [
-    { hp: 100,  w: 40, h: 66,  color: '#ff6b6b', dark: '#9e3040', dmg: 15, score: 100,  speed: 1.00, name: 'Scout' },
-    { hp: 200,  w: 48, h: 82,  color: '#ff9f43', dark: '#a0561a', dmg: 25, score: 250,  speed: 0.90, name: 'Hauler' },
-    { hp: 500,  w: 60, h: 104, color: '#b388ff', dark: '#5b3aa0', dmg: 40, score: 700,  speed: 0.78, name: 'Armour' },
-    { hp: 1000, w: 72, h: 126, color: '#ff4f9a', dark: '#7d1e4c', dmg: 60, score: 1600, speed: 0.66, name: 'Juggernaut' },
+    // points earned = enemy health; damage dealt is a share of enemy health
+    { hp: 100,  w: 40, h: 66,  color: '#ff6b6b', dark: '#9e3040', score: 100,  speed: 1.00, name: 'Scout' },
+    { hp: 200,  w: 48, h: 82,  color: '#ff9f43', dark: '#a0561a', score: 200,  speed: 0.90, name: 'Hauler' },
+    { hp: 500,  w: 60, h: 104, color: '#b388ff', dark: '#5b3aa0', score: 500,  speed: 0.78, name: 'Armour' },
+    { hp: 1000, w: 72, h: 126, color: '#ff4f9a', dark: '#7d1e4c', score: 1000, speed: 0.66, name: 'Juggernaut' },
   ];
+  const PASS_SHARE = 0.10;   // enemy gets past you, or you jump over it
+  const CRASH_SHARE = 0.25;  // direct hit
+  const MAX_HP_CAP = 1000;
+  const ARMOUR_CAP = 20000;
+  const TURRET_COSTS = [20000, 60000, 250000];
+  const UPGRADE_COSTS = TURRET_COSTS.map(c => c * 0.6); // 40% cheaper than turrets
+  const healAmount = L => Math.min(300, 30 * L);
+  const armourBoxAmount = L => Math.min(ARMOUR_CAP, 1000 * Math.max(1, L - 8));
 
   const BOX = {
     shot: { color: '#5ee0ff', label: s => '×' + (s.shot + 1) },
     rate: { color: '#ffd166', label: s => (s.rate + 1) + '/s' },
-    heal: { color: '#6ee7a8', label: () => '+HP' },
+    heal: { color: '#6ee7a8', label: s => '+' + healAmount(s.level) },
+    armour: { color: '#8fb8ff', label: () => 'ARM', rare: true },
     mcap: { color: '#ff7ad9', label: s => 'M' + (s.mCap + 1), rare: true },
     mdmg: { color: '#ff5c5c', label: () => '200', rare: true },
     turret: { color: '#9be15d', label: () => 'TUR' },
@@ -272,8 +318,6 @@
   const TURRET_HP = 200;
   const TURRET_FIRE_TIME = 5;   // seconds of firing before overheating
   const TURRET_COOL_TIME = 2;   // seconds offline while cooling
-  const PASS_DMG = 10;          // 10% of 100 HP when an enemy gets past
-  const CRASH_DMG = 40;         // 40% on a direct hit
 
   // ---------- canvas setup ----------
   const canvas = document.getElementById('game');
@@ -353,8 +397,9 @@
   }
 
   // ---------- input ----------
-  const keys = { left: false, right: false, fire: false };
-  let mode = 'menu'; // menu | play | paused | over
+  const keys = { left: false, right: false, up: false, down: false, fire: false };
+  const HELD = ['left', 'right', 'up', 'down', 'fire'];
+  let mode = 'menu'; // menu | play | paused | shop | dying | over
 
   function tryJump() {
     if (mode !== 'play') return;
@@ -375,10 +420,18 @@
     if (mode === 'play' && (c === 'Tab' || c === 'Space' || c.startsWith('Arrow'))) e.preventDefault();
     if (c === 'ArrowLeft' || c === 'KeyA') keys.left = true;
     else if (c === 'ArrowRight' || c === 'KeyD') keys.right = true;
+    else if (c === 'ArrowUp') keys.up = true;
+    else if (c === 'ArrowDown' || c === 'KeyS') keys.down = true;
     else if (c === 'KeyW') keys.fire = true;
     if (e.repeat) return;
+    if (mode === 'shop') {
+      const m = c.match(/^(?:Digit|Numpad)(\d)$/);
+      if (m) { buyItem(parseInt(m[1], 10) - 1); return; }
+      if (c === 'KeyB' || c === 'Escape' || c === 'KeyP') { closeShop(); return; }
+    }
     if (c === 'Tab' || c === 'Space') tryJump();
     else if (c === 'KeyE') tryMissile();
+    else if (c === 'KeyB') openShop();
     else if (c === 'KeyP' || c === 'Escape') togglePause();
     else if (c === 'KeyM') { muted = !muted; }
     else if (c === 'Enter' && (mode === 'menu' || mode === 'over')) { e.preventDefault(); startGame(); }
@@ -387,9 +440,11 @@
     const c = e.code;
     if (c === 'ArrowLeft' || c === 'KeyA') keys.left = false;
     else if (c === 'ArrowRight' || c === 'KeyD') keys.right = false;
+    else if (c === 'ArrowUp') keys.up = false;
+    else if (c === 'ArrowDown' || c === 'KeyS') keys.down = false;
     else if (c === 'KeyW') keys.fire = false;
   });
-  window.addEventListener('blur', () => { keys.left = keys.right = keys.fire = false; if (mode === 'play') togglePause(); });
+  window.addEventListener('blur', () => { HELD.forEach(k => keys[k] = false); if (mode === 'play') togglePause(); });
 
   // touch pad
   window.addEventListener('touchstart', () => document.body.classList.add('touch'), { once: true, passive: true });
@@ -399,14 +454,15 @@
       e.preventDefault();
       ensureAudio();
       btn.classList.add('on');
-      if (k === 'left' || k === 'right' || k === 'fire') keys[k] = true;
+      if (HELD.includes(k)) keys[k] = true;
       else if (k === 'jump') tryJump();
       else if (k === 'missile') tryMissile();
+      else if (k === 'shop') { if (mode === 'shop') closeShop(); else openShop(); }
       try { btn.setPointerCapture(e.pointerId); } catch (_) {}
     };
     const up = e => {
       btn.classList.remove('on');
-      if (k === 'left' || k === 'right' || k === 'fire') keys[k] = false;
+      if (HELD.includes(k)) keys[k] = false;
     };
     btn.addEventListener('pointerdown', down);
     btn.addEventListener('pointerup', up);
@@ -419,12 +475,13 @@
   let S;
   function newState() {
     return {
-      t: 0, level: 1, levelT: 0, score: 0, kills: 0,
+      t: 0, level: 1, levelT: 0, score: 0, points: 0, kills: 0,
       banner: 2.4, shake: 0, roadOff: 0, sideOff: 0,
-      p: { x: laneX(1) + LANE_W / 2, y: H - 130, w: 26, h: 62, hp: 100, maxHp: 100, jumpT: 0, inv: 0, tilt: 0 },
+      p: { x: laneX(1) + LANE_W / 2, y: H - 150, w: 26, h: 62, hp: 100, maxHp: 100, jumpT: 0, inv: 0, tilt: 0 },
+      armour: 0,
       shot: 1, rate: 2, fireCd: 0,
       mCap: 2, missiles: 2, mDmg: 100, mReload: MISSILE_RELOAD, missileSide: 1,
-      turrets: [], tRate: 2, tMsl: 0,
+      turrets: [], rearSlots: 0, tRate: 2, tMsl: 0,
       bullets: [], rockets: [], enemies: [], boxes: [], parts: [], floaters: [],
       spawnT: 1.4,
     };
@@ -486,10 +543,11 @@
     const pool = [];
     if (S.shot < 4) pool.push(['shot', 26]);
     if (S.rate < 5) pool.push(['rate', 30]);
-    pool.push(['heal', S.p.hp < S.p.maxHp ? 18 : 6]);
+    pool.push(['heal', S.p.hp < S.p.maxHp ? 22 : S.p.maxHp < MAX_HP_CAP ? 14 : 4]);
     if (S.mCap < 5) pool.push(['mcap', 7]);
     if (S.mDmg < 200) pool.push(['mdmg', 5]);
-    if (S.level >= 5 && S.turrets.length < 2) pool.push(['turret', 14]);
+    if (S.level >= 5 && hasEmptyTurretSlot()) pool.push(['turret', 14]);
+    if (S.level >= 9 && S.armour < ARMOUR_CAP) pool.push(['armour', 10]);
     if (S.level >= 7 && S.turrets.length > 0) {
       if (S.tRate < 5) pool.push(['trate', 10]);
       if (S.tMsl < 2) pool.push(['tmsl', 6]);
@@ -506,14 +564,14 @@
     switch (b.type) {
       case 'shot': S.shot = Math.min(4, S.shot + 1); txt = S.shot + ' SHOTS'; break;
       case 'rate': S.rate = Math.min(5, S.rate + 1); txt = 'FIRE RATE ' + S.rate + '/s'; break;
-      case 'heal': S.p.hp = Math.min(S.p.maxHp, S.p.hp + 30); txt = '+30 HP'; break;
+      case 'heal': { const a = healAmount(S.level); addHealth(a); txt = '+' + a + ' HP'; break; }
+      case 'armour': { const a = armourBoxAmount(S.level); S.armour = Math.min(ARMOUR_CAP, S.armour + a); txt = '+' + a.toLocaleString('en-GB') + ' ARMOUR'; break; }
       case 'mcap': S.mCap = Math.min(5, S.mCap + 1); S.missiles = Math.min(S.mCap, S.missiles + 1); txt = S.mCap + ' MISSILES'; break;
       case 'mdmg': S.mDmg = 200; txt = 'MISSILE DMG 200'; break;
       case 'turret':
-        if (S.turrets.length < 2) {
-          S.turrets.push({ x: S.p.x, y: S.p.y - 80, w: 26, h: 26, hp: TURRET_HP, maxHp: TURRET_HP, heat: 0, cool: 0, fireCd: 0.3, aim: -Math.PI / 2, hit: 0 });
-          txt = 'TURRET DEPLOYED';
-        } else { S.turrets.forEach(t => t.hp = t.maxHp); txt = 'TURRETS REPAIRED'; }
+        if (countTurrets('front') < 2) { addTurret('front'); txt = 'TURRET DEPLOYED'; }
+        else if (countTurrets('rear') < S.rearSlots) { addTurret('rear'); txt = 'REAR TURRET REBUILT'; }
+        else { S.turrets.forEach(t => t.hp = t.maxHp); txt = 'TURRETS REPAIRED'; }
         break;
       case 'trate': S.tRate = Math.min(5, S.tRate + 1); txt = 'TURRET ' + S.tRate + '/s'; break;
       case 'tmsl': S.tMsl = Math.min(2, S.tMsl + 1); txt = 'TURRET MISSILES ×' + S.tMsl; break;
@@ -521,6 +579,54 @@
     S.floaters.push({ x: S.p.x, y: S.p.y - 50, txt, color: BOX[b.type].color, life: 1.4, max: 1.4, big: true });
     burst(b.x, b.y, BOX[b.type].color, 14, 160);
     sfx(rare ? 'rare' : 'pickup');
+  }
+
+  // health above the current max raises the max, up to 1000
+  function addHealth(a) {
+    const p = S.p;
+    const next = p.hp + a;
+    if (next > p.maxHp) p.maxHp = Math.min(MAX_HP_CAP, next);
+    p.hp = Math.min(p.maxHp, next);
+  }
+  const countTurrets = pos => S.turrets.filter(t => t.pos === pos).length;
+  const hasEmptyTurretSlot = () => countTurrets('front') < 2 || countTurrets('rear') < S.rearSlots;
+  function addTurret(pos) {
+    const yOff = pos === 'front' ? -80 : 60;
+    S.turrets.push({ pos, x: S.p.x, y: S.p.y + yOff, w: 26, h: 26, hp: TURRET_HP, maxHp: TURRET_HP, heat: 0, cool: 0, fireCd: 0.3, aim: -Math.PI / 2, hit: 0 });
+  }
+
+  // ---------- points shop ----------
+  function shopItems() {
+    const p = S.p, hasT = S.turrets.length > 0;
+    const up = (lvl, cap, unit) => lvl >= cap ? null : UPGRADE_COSTS[lvl - (cap - 3)];
+    return [
+      { id: 'repair', name: 'Repair +100 HP', desc: p.hp >= p.maxHp && p.maxHp < MAX_HP_CAP ? 'Raises max health to ' + Math.min(MAX_HP_CAP, p.maxHp + 100) : 'Health beyond max raises max, up to 1000',
+        cost: 100, maxed: p.hp >= MAX_HP_CAP },
+      { id: 'shot', name: 'Extra gun barrel', desc: S.shot + ' → ' + (S.shot + 1) + ' bullets per shot', cost: up(S.shot, 4), maxed: S.shot >= 4 },
+      { id: 'rate', name: 'Gun fire rate', desc: S.rate + '/s → ' + (S.rate + 1) + '/s', cost: up(S.rate, 5), maxed: S.rate >= 5 },
+      { id: 'mcap', name: 'Missile storage', desc: S.mCap + ' → ' + (S.mCap + 1) + ' missiles', cost: up(S.mCap, 5), maxed: S.mCap >= 5 },
+      { id: 'turret', name: 'Rear turret slot', desc: 'New turret riding behind the bike · ' + S.rearSlots + '/3 owned', cost: TURRET_COSTS[S.rearSlots], maxed: S.rearSlots >= 3 },
+      { id: 'trate', name: 'Turret fire rate', desc: hasT ? S.tRate + '/s → ' + (S.tRate + 1) + '/s' : 'Needs a turret', cost: up(S.tRate, 5), maxed: S.tRate >= 5, locked: !hasT },
+      { id: 'tmsl', name: 'Turret missiles', desc: hasT ? S.tMsl + ' → ' + (S.tMsl + 1) + ' per salvo' : 'Needs a turret', cost: S.tMsl >= 2 ? null : UPGRADE_COSTS[S.tMsl], maxed: S.tMsl >= 2, locked: !hasT },
+      { id: 'armour', name: 'Armour layer', desc: S.level < 9 ? 'Unlocks at level 9' : 'Blocks 2,000 damage (costs 2×, lasts 4×)', cost: 1000, maxed: S.armour >= ARMOUR_CAP, locked: S.level < 9 },
+    ];
+  }
+  function buyItem(i) {
+    const it = shopItems()[i];
+    if (!it || it.maxed || it.locked || it.cost == null || S.points < it.cost) { sfx('empty'); return; }
+    S.points -= it.cost;
+    switch (it.id) {
+      case 'repair': addHealth(100); break;
+      case 'shot': S.shot++; break;
+      case 'rate': S.rate++; break;
+      case 'mcap': S.mCap++; S.missiles++; break;
+      case 'turret': S.rearSlots++; addTurret('rear'); break;
+      case 'trate': S.tRate++; break;
+      case 'tmsl': S.tMsl++; break;
+      case 'armour': S.armour = Math.min(ARMOUR_CAP, S.armour + 2000); break;
+    }
+    sfx(it.cost >= 10000 ? 'rare' : 'pickup');
+    renderShop();
   }
 
   function burst(x, y, color, n, spd, size) {
@@ -538,6 +644,7 @@
   }
   function killEnemy(e) {
     S.score += e.tier.score;
+    S.points += e.tier.score;
     S.kills++;
     const big = e.tier.hp >= 500;
     explode(e, big);
@@ -546,17 +653,27 @@
     if (Math.random() < dropChance) spawnBox(e.x, e.y);
   }
 
-  function hurt(dmg, passX) {
-    S.p.hp -= dmg;
-    if (passX === undefined) {
+  // kind: 'crash' (direct hit), 'jump' (jumped over), 'pass' (got past)
+  function hurt(dmg, kind, fx) {
+    dmg = Math.round(dmg);
+    const absorbed = Math.min(S.armour, dmg);
+    S.armour -= absorbed;
+    S.p.hp -= dmg - absorbed;
+    const label = (absorbed === dmg ? 'ARMOUR -' : '-') + dmg;
+    const color = absorbed === dmg ? '#8fb8ff' : '#ff6b6b';
+    if (kind === 'crash') {
       S.p.inv = 1;
       S.shake = 14;
       sfx('hurt');
-      S.floaters.push({ x: S.p.x, y: S.p.y - 40, txt: '-' + dmg, color: '#ff6b6b', life: 1, max: 1, big: true });
+      S.floaters.push({ x: S.p.x, y: S.p.y - 40, txt: label, color, life: 1, max: 1, big: true });
+    } else if (kind === 'jump') {
+      S.shake = Math.max(S.shake, 6);
+      sfx('hurt');
+      S.floaters.push({ x: S.p.x, y: S.p.y - 50, txt: 'JUMPED ' + label, color, life: 1, max: 1, big: true });
     } else {
       S.shake = Math.max(S.shake, 4);
       sfx('empty');
-      S.floaters.push({ x: passX, y: H - 60, txt: 'GOT PAST -' + dmg, color: '#ff6b6b', life: 1.1, max: 1.1 });
+      S.floaters.push({ x: fx, y: H - 60, txt: 'GOT PAST ' + label, color, life: 1.1, max: 1.1 });
     }
     if (S.p.hp <= 0) {
       S.p.hp = 0;
@@ -593,7 +710,9 @@
     const p = S.p;
     if (alive) {
       const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      const vdir = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
       p.x = clamp(p.x + dir * 300 * dt, ROAD_L + p.w / 2 + 6, ROAD_R - p.w / 2 - 6);
+      p.y = clamp(p.y + vdir * 260 * dt, 190, H - 150);
       p.tilt += (dir * 0.22 - p.tilt) * Math.min(1, dt * 10);
       if (p.jumpT > 0) p.jumpT = Math.max(0, p.jumpT - dt);
       if (p.inv > 0) p.inv -= dt;
@@ -622,12 +741,15 @@
         spawnWave();
         S.spawnT = Math.max(0.5, 2.0 - L * 0.13) * rand(0.75, 1.25);
       }
-      // turrets ride ahead of the bike
-      const n = S.turrets.length;
-      S.turrets.forEach((t, i) => {
-        const tx = clamp(p.x + (n === 1 ? 0 : (i === 0 ? -28 : 28)), ROAD_L + 16, ROAD_R - 16);
+      // box turrets ride ahead of the bike, bought turrets ride behind it
+      const OFFS = [[0], [-28, 28], [-40, 0, 40]];
+      const groups = { front: S.turrets.filter(t => t.pos === 'front'), rear: S.turrets.filter(t => t.pos === 'rear') };
+      S.turrets.forEach(t => {
+        const g = groups[t.pos], i = g.indexOf(t);
+        const tx = clamp(p.x + OFFS[g.length - 1][i], ROAD_L + 16, ROAD_R - 16);
+        const ty = t.pos === 'front' ? p.y - 82 : p.y + 64;
         t.x += (tx - t.x) * Math.min(1, dt * 8);
-        t.y += (p.y - 82 - t.y) * Math.min(1, dt * 8);
+        t.y += (ty - t.y) * Math.min(1, dt * 8);
         if (t.hit > 0) t.hit -= dt;
         if (t.cool > 0) {
           t.cool -= dt;
@@ -749,7 +871,8 @@
       }
     }
 
-    // turret collisions: turrets sit in front of the bike and take direct hits first
+    // turret collisions: front turrets shield the bike, rear turrets catch what gets past.
+    // A turret takes 40% of its own health per direct hit.
     if (alive) {
       for (const t of S.turrets) {
         for (const e of S.enemies) {
@@ -770,34 +893,39 @@
       S.turrets = S.turrets.filter(t => t.hp > 0);
     }
 
-    // enemies that get past the bike cost 10% health
-    if (alive) {
-      for (const e of S.enemies) {
-        if (e.dead || e.passed) continue;
-        if (e.y - e.h / 2 > p.y + p.h / 2) {
-          e.passed = true;
-          hurt(PASS_DMG, e.x);
-          if (mode !== 'play') break;
-        }
-      }
-    }
-
-    // player collisions
+    // player collisions: a direct hit costs 25% of the enemy's health,
+    // jumping over it costs 10% (the same as letting it past)
     if (alive && mode === 'play') {
       const air = jumpHeight(p) > 0.28;
       const hb = { x: p.x, y: p.y, w: 20, h: 50 };
       for (const e of S.enemies) {
-        if (e.dead || air || p.inv > 0) continue;
-        if (overlap(hb, e, 0, 8)) {
+        if (e.dead || e.passed) continue;
+        if (!overlap(hb, e, 0, 8)) continue;
+        if (air) {
+          e.passed = true;
+          hurt(e.tier.hp * PASS_SHARE, 'jump');
+        } else if (p.inv <= 0) {
           e.dead = true;
           e.passed = true;
           explode(e, e.tier.hp >= 500);
-          hurt(CRASH_DMG);
-          if (mode !== 'play') break;
+          hurt(e.tier.hp * CRASH_SHARE, 'crash');
         }
+        if (mode !== 'play') break;
       }
       for (const b of S.boxes) {
         if (!b.dead && overlap({ x: p.x, y: p.y, w: 34, h: 62 }, b)) { b.dead = true; applyBox(b); }
+      }
+    }
+
+    // enemies that get past you and off the bottom of the road cost 10% of their health
+    if (alive && mode === 'play') {
+      for (const e of S.enemies) {
+        if (e.dead || e.passed) continue;
+        if (e.y - e.h / 2 > H - 44) {
+          e.passed = true;
+          hurt(e.tier.hp * PASS_SHARE, 'pass', e.x);
+          if (mode !== 'play') break;
+        }
       }
     }
 
@@ -1093,6 +1221,11 @@
     ctx.fillStyle = '#0f1024';
     ctx.font = '700 10px "Chakra Petch", sans-serif';
     ctx.fillText(Math.ceil(p.hp) + ' / ' + p.maxHp, 20, 37);
+    if (S.armour > 0) {
+      ctx.fillStyle = '#8fb8ff';
+      ctx.font = '700 9px "Chakra Petch", sans-serif';
+      ctx.fillText('ARMOUR ' + Math.ceil(S.armour).toLocaleString('en-GB'), 14, 51);
+    }
 
     // level
     ctx.textAlign = 'center';
@@ -1111,10 +1244,13 @@
     ctx.textAlign = 'right';
     ctx.fillStyle = '#9a9cc4';
     ctx.font = '600 10px "Chakra Petch", sans-serif';
-    ctx.fillText('SCORE', W - 14, 20);
+    ctx.fillText('POINTS', W - 14, 18);
     ctx.fillStyle = '#eef0ff';
-    ctx.font = '700 20px "Chakra Petch", sans-serif';
-    ctx.fillText(S.score.toLocaleString('en-GB'), W - 14, 42);
+    ctx.font = '700 18px "Chakra Petch", sans-serif';
+    ctx.fillText(S.points.toLocaleString('en-GB'), W - 14, 37);
+    ctx.fillStyle = '#8fb8ff';
+    ctx.font = '600 9px "Chakra Petch", sans-serif';
+    ctx.fillText('B = shop', W - 14, 51);
 
     // weapon panel
     const py = H - 44;
@@ -1171,6 +1307,7 @@
     if (L === 3) return 'Armour joins · 500 HP';
     if (L === 5) return 'Juggernauts (1000 HP) · turret boxes unlocked';
     if (L === 7) return 'Turret upgrades: fire rate + missiles';
+    if (L === 9) return 'Armour unlocked: boxes and shop';
     return 'More traffic, faster';
   }
 
@@ -1263,9 +1400,11 @@
       <h1>Throttle<br><span>Siege</span></h1>
       <dl class="keys">
         <dt><kbd>←</kbd><kbd>→</kbd></dt><dd>Steer</dd>
-        <dt><kbd>Tab</kbd></dt><dd>Jump over traffic</dd>
+        <dt><kbd>↑</kbd><kbd>↓</kbd></dt><dd>Ride forward and back</dd>
+        <dt><kbd>Tab</kbd></dt><dd>Jump over traffic (10% damage, not 25%)</dd>
         <dt><kbd>W</kbd></dt><dd>Fire gun, hold for auto (20 dmg)</dd>
         <dt><kbd>E</kbd></dt><dd>Homing missile (100 dmg)</dd>
+        <dt><kbd>B</kbd></dt><dd>Points shop</dd>
         <dt><kbd>P</kbd></dt><dd>Pause</dd>
       </dl>
       <ul class="chips">
@@ -1273,14 +1412,15 @@
         <li>${chip('#ffd166', '2/s')} Fire rate</li>
         <li>${chip('#ff7ad9', 'M3')} Missile slots</li>
         <li>${chip('#ff5c5c', '200')} Missile dmg</li>
-        <li>${chip('#6ee7a8', '+HP')} Repair 30</li>
+        <li>${chip('#6ee7a8', '+HP')} Repair, 30 → 300</li>
         <li>${chip('#9be15d', 'TUR')} Turret, level 5+</li>
+        <li>${chip('#8fb8ff', 'ARM')} Armour, level 9+</li>
       </ul>
       <div class="row">
         <button class="primary" id="startBtn">Start ride</button>
         <button class="ghost" id="muteBtn">Sound: ${muted ? 'off' : 'on'}</button>
       </div>
-      <p class="note">Boxes drop from destroyed enemies. Each enemy that gets past costs 10 HP, a crash costs 40. Missiles refill every 15 s.${best ? ' Best score ' + best.toLocaleString('en-GB') + '.' : ''}</p>`;
+      <p class="note">Each enemy is worth its health in points. A crash costs 25% of the enemy's health, one that gets past costs 10%. Boxes drop from destroyed enemies.${best ? ' Best score ' + best.toLocaleString('en-GB') + '.' : ''}</p>`;
     overlay.hidden = false;
     document.getElementById('startBtn').onclick = startGame;
     document.getElementById('muteBtn').onclick = e => { muted = !muted; e.target.textContent = 'Sound: ' + (muted ? 'off' : 'on'); };
@@ -1300,10 +1440,11 @@
       card.innerHTML = `
         <p class="eyebrow">Level ${S.level} · ${Math.ceil(LEVEL_TIME - S.levelT)}s left</p>
         <h1>Paused</h1>
-        <div class="row"><button class="primary" id="resumeBtn">Resume</button><button class="ghost" id="quitBtn">Quit to menu</button></div>
+        <div class="row"><button class="primary" id="resumeBtn">Resume</button><button class="ghost" id="shopBtn">Shop</button><button class="ghost" id="quitBtn">Quit to menu</button></div>
         <p class="note">Press P or Esc to resume.</p>`;
       overlay.hidden = false;
       document.getElementById('resumeBtn').onclick = togglePause;
+      document.getElementById('shopBtn').onclick = () => { mode = 'play'; openShop(); };
       document.getElementById('quitBtn').onclick = () => { S = newState(); showMenu(); };
       document.getElementById('resumeBtn').focus({ preventScroll: true });
     } else if (mode === 'paused') {
@@ -1312,6 +1453,43 @@
       last = performance.now();
     }
   }
+  // shop pauses the ride while open
+  function openShop() {
+    if (mode !== 'play') return;
+    mode = 'shop';
+    HELD.forEach(k => keys[k] = false);
+    renderShop();
+    overlay.hidden = false;
+  }
+  function closeShop() {
+    if (mode !== 'shop') return;
+    mode = 'play';
+    overlay.hidden = true;
+    last = performance.now();
+  }
+  function renderShop() {
+    const items = shopItems();
+    card.innerHTML = `
+      <p class="eyebrow">Points shop · ride paused</p>
+      <p class="wallet">${S.points.toLocaleString('en-GB')} <small>POINTS</small></p>
+      <div class="shoplist">
+        ${items.map((it, i) => {
+          const off = it.maxed || it.locked || it.cost == null || S.points < it.cost;
+          const price = it.maxed ? 'MAX' : it.locked ? '—' : it.cost.toLocaleString('en-GB');
+          return `<button class="shopitem" data-i="${i}" ${off ? 'disabled' : ''}>
+            <span class="n">${i + 1}</span>
+            <span class="t"><b>${it.name}</b><small>${it.desc}</small></span>
+            <span class="c">${price}</span>
+          </button>`;
+        }).join('')}
+      </div>
+      <div class="row"><button class="primary" id="closeShopBtn">Back to the road</button></div>
+      <p class="note">Press 1–8 to buy, B or Esc to close.</p>`;
+    card.querySelectorAll('.shopitem').forEach(b => b.onclick = () => buyItem(parseInt(b.dataset.i, 10)));
+    document.getElementById('closeShopBtn').onclick = closeShop;
+    document.getElementById('closeShopBtn').focus({ preventScroll: true });
+  }
+
   function gameOver() {
     mode = 'over';
     const isBest = S.score > best;
