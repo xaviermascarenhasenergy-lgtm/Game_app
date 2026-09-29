@@ -198,7 +198,9 @@
   .pad .dpad [data-k="left"] { grid-column: 1; grid-row: 2; }
   .pad .dpad [data-k="down"] { grid-column: 2; grid-row: 2; }
   .pad .dpad [data-k="right"] { grid-column: 3; grid-row: 2; }
-  .pad .acts { grid-template-columns: repeat(2, 64px); grid-template-rows: repeat(2, 52px); }
+  .pad .dpad { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(2, 50px); }
+  .pad .acts { grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(2, 50px); }
+  .pad .saber { color: #bff4ff; }
   .pad .shop { color: #8fb8ff; }
   .pad button {
     width: 100%; height: 100%;
@@ -223,7 +225,9 @@
   body.touch .pad { display: flex; }
   @media (max-width: 380px) {
     .pad .dpad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 46px); }
-    .pad .acts { grid-template-columns: repeat(2, 56px); grid-template-rows: repeat(2, 46px); }
+    .pad .acts { grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 46px); }
+    .pad .dpad { grid-template-columns: repeat(3, 42px); }
+    .pad button { font-size: 11px; }
   }
   .shoplist { display: grid; gap: 6px; }
   .shopitem {
@@ -272,6 +276,7 @@
       <button class="jump" data-k="jump">JUMP</button>
       <button class="fire" data-k="fire">FIRE</button>
       <button class="msl" data-k="missile">MSL</button>
+      <button class="saber" data-k="saber">SABER</button>
       <button class="shop" data-k="shop">SHOP</button>
     </div>
   </div>
@@ -298,11 +303,15 @@
   const PASS_SHARE = 0.10;   // enemy gets past you, or you jump over it
   const CRASH_SHARE = 0.25;  // direct hit
   const MAX_HP_CAP = 1000;
-  const ARMOUR_CAP = 20000;
+  const ARMOUR_CAP = 5000;
   const TURRET_COSTS = [20000, 60000, 250000];
   const UPGRADE_COSTS = TURRET_COSTS.map(c => c * 0.6); // 40% cheaper than turrets
   const healAmount = L => Math.min(300, 30 * L);
-  const armourBoxAmount = L => Math.min(ARMOUR_CAP, 1000 * Math.max(1, L - 8));
+  const POWER_STEPS = [1, 2, 4, 7];                     // shot power, bought with points only
+  const BOSS_EVERY = 10;
+  const isBossLevel = L => L % BOSS_EVERY === 0;
+  const bossHp = L => Math.round(20000 * Math.pow(L / BOSS_EVERY, 1.5));
+  const SABER_RANGE = 90;
 
   const BOX = {
     shot: { color: '#5ee0ff', label: s => '×' + (s.shot + 1) },
@@ -431,6 +440,7 @@
     }
     if (c === 'Tab' || c === 'Space') tryJump();
     else if (c === 'KeyE') tryMissile();
+    else if (c === 'KeyF') trySaber();
     else if (c === 'KeyB') openShop();
     else if (c === 'KeyP' || c === 'Escape') togglePause();
     else if (c === 'KeyM') { muted = !muted; }
@@ -457,6 +467,7 @@
       if (HELD.includes(k)) keys[k] = true;
       else if (k === 'jump') tryJump();
       else if (k === 'missile') tryMissile();
+      else if (k === 'saber') trySaber();
       else if (k === 'shop') { if (mode === 'shop') closeShop(); else openShop(); }
       try { btn.setPointerCapture(e.pointerId); } catch (_) {}
     };
@@ -478,7 +489,8 @@
       t: 0, level: 1, levelT: 0, score: 0, points: 0, kills: 0,
       banner: 2.4, shake: 0, roadOff: 0, sideOff: 0,
       p: { x: laneX(1) + LANE_W / 2, y: H - 150, w: 26, h: 62, hp: 100, maxHp: 100, jumpT: 0, inv: 0, tilt: 0 },
-      armour: 0,
+      armour: 0, power: 0,
+      boss: null, saberT: 0, saberCd: 0, laser: null, laserSfx: 0,
       shot: 1, rate: 2, fireCd: 0,
       mCap: 2, missiles: 2, mDmg: 100, mReload: MISSILE_RELOAD, missileSide: 1,
       turrets: [], rearSlots: 0, tRate: 2, tMsl: 0,
@@ -502,10 +514,10 @@
   // difficulty curve
   function tierWeights(L) {
     return [
-      Math.max(0.2, 1 - 0.14 * (L - 1)),
-      L >= 2 ? Math.min(0.4, 0.12 * (L - 1)) : 0,
-      L >= 3 ? Math.min(0.32, 0.07 * (L - 2)) : 0,
-      L >= 5 ? Math.min(0.26, 0.05 * (L - 4)) : 0,
+      Math.max(0.2, 1 - 0.09 * (L - 1)),
+      L >= 2 ? Math.min(0.4, 0.08 * (L - 1)) : 0,
+      L >= 4 ? Math.min(0.32, 0.05 * (L - 3)) : 0,
+      L >= 6 ? Math.min(0.26, 0.035 * (L - 5)) : 0,
     ];
   }
   function pickTier(L) {
@@ -517,9 +529,9 @@
   function spawnWave() {
     const L = S.level;
     let count = 1;
-    if (Math.random() < Math.min(0.6, 0.08 * (L - 1))) count++;
-    if (L >= 5 && Math.random() < Math.min(0.35, 0.05 * (L - 4))) count++;
-    if (L >= 9 && Math.random() < 0.2) count++;
+    if (Math.random() < Math.min(0.55, 0.05 * (L - 1))) count++;
+    if (L >= 7 && Math.random() < Math.min(0.35, 0.035 * (L - 6))) count++;
+    if (L >= 12 && Math.random() < 0.2) count++;
     const lanes = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     let placed = 0;
     for (const lane of lanes) {
@@ -532,7 +544,7 @@
         tier, hp: tier.hp, maxHp: tier.hp, w: tier.w, h: tier.h,
         x: laneX(lane), tx: laneX(lane), lane,
         y: -tier.h / 2 - rand(0, 60),
-        vy: (100 + L * 9) * tier.speed * rand(0.9, 1.12),
+        vy: (100 + L * 6) * tier.speed * rand(0.9, 1.12),
         hit: 0, weave, weaveT: rand(1, 2.5),
       });
       placed++;
@@ -565,7 +577,7 @@
       case 'shot': S.shot = Math.min(4, S.shot + 1); txt = S.shot + ' SHOTS'; break;
       case 'rate': S.rate = Math.min(5, S.rate + 1); txt = 'FIRE RATE ' + S.rate + '/s'; break;
       case 'heal': { const a = healAmount(S.level); addHealth(a); txt = '+' + a + ' HP'; break; }
-      case 'armour': { const a = armourBoxAmount(S.level); S.armour = Math.min(ARMOUR_CAP, S.armour + a); txt = '+' + a.toLocaleString('en-GB') + ' ARMOUR'; break; }
+      case 'armour': { const a = healAmount(S.level); S.armour = Math.min(ARMOUR_CAP, S.armour + a); txt = '+' + a.toLocaleString('en-GB') + ' ARMOUR'; break; }
       case 'mcap': S.mCap = Math.min(5, S.mCap + 1); S.missiles = Math.min(S.mCap, S.missiles + 1); txt = S.mCap + ' MISSILES'; break;
       case 'mdmg': S.mDmg = 200; txt = 'MISSILE DMG 200'; break;
       case 'turret':
@@ -608,7 +620,8 @@
       { id: 'turret', name: 'Rear turret slot', desc: 'New turret riding behind the bike · ' + S.rearSlots + '/3 owned', cost: TURRET_COSTS[S.rearSlots], maxed: S.rearSlots >= 3 },
       { id: 'trate', name: 'Turret fire rate', desc: hasT ? S.tRate + '/s → ' + (S.tRate + 1) + '/s' : 'Needs a turret', cost: up(S.tRate, 5), maxed: S.tRate >= 5, locked: !hasT },
       { id: 'tmsl', name: 'Turret missiles', desc: hasT ? S.tMsl + ' → ' + (S.tMsl + 1) + ' per salvo' : 'Needs a turret', cost: S.tMsl >= 2 ? null : UPGRADE_COSTS[S.tMsl], maxed: S.tMsl >= 2, locked: !hasT },
-      { id: 'armour', name: 'Armour layer', desc: S.level < 9 ? 'Unlocks at level 9' : 'Blocks 2,000 damage (costs 2×, lasts 4×)', cost: 1000, maxed: S.armour >= ARMOUR_CAP, locked: S.level < 9 },
+      { id: 'armour', name: 'Armour +100', desc: S.level < 9 ? 'Unlocks at level 9' : 'Same price as health · max ' + ARMOUR_CAP.toLocaleString('en-GB'), cost: 100, maxed: S.armour >= ARMOUR_CAP, locked: S.level < 9 },
+      { id: 'power', name: 'Shot power', desc: S.power >= 3 ? 'Maxed at ×7' : '×' + POWER_STEPS[S.power] + ' → ×' + POWER_STEPS[S.power + 1] + ' damage (' + (BULLET_DMG * POWER_STEPS[S.power + 1]) + ' per bullet)', cost: S.power >= 3 ? null : UPGRADE_COSTS[S.power], maxed: S.power >= 3 },
     ];
   }
   function buyItem(i) {
@@ -623,7 +636,8 @@
       case 'turret': S.rearSlots++; addTurret('rear'); break;
       case 'trate': S.tRate++; break;
       case 'tmsl': S.tMsl++; break;
-      case 'armour': S.armour = Math.min(ARMOUR_CAP, S.armour + 2000); break;
+      case 'armour': S.armour = Math.min(ARMOUR_CAP, S.armour + 100); break;
+      case 'power': S.power++; break;
     }
     sfx(it.cost >= 10000 ? 'rare' : 'pickup');
     renderShop();
@@ -675,7 +689,11 @@
       sfx('empty');
       S.floaters.push({ x: fx, y: H - 60, txt: 'GOT PAST ' + label, color, life: 1.1, max: 1.1 });
     }
-    if (S.p.hp <= 0) {
+    if (S.p.hp <= 0) die();
+  }
+  function die() {
+    if (mode !== 'play') return;
+    {
       S.p.hp = 0;
       burst(S.p.x, S.p.y, '#5ee0ff', 60, 300, 4);
       burst(S.p.x, S.p.y, '#ffd166', 40, 240);
@@ -685,11 +703,168 @@
     }
   }
 
+  // ---------- bosses (every 10th level) ----------
+  const targetList = () => S.boss ? S.enemies.concat([S.boss]) : S.enemies;
+
+  function damageTarget(e, dmg, flash) {
+    if (e.dead) return;
+    e.hp -= dmg;
+    e.hit = Math.max(e.hit || 0, flash || 0.07);
+    if (e.hp > 0) return;
+    e.dead = true;
+    if (e.isBoss) killBoss(e); else killEnemy(e);
+  }
+
+  function startBoss() {
+    const L = S.level, n = L / BOSS_EVERY;
+    const hp = bossHp(L);
+    S.boss = {
+      isBoss: true, n, x: W / 2, y: -90, w: 150, h: 104, hp, maxHp: hp,
+      state: 'enter', t: 0, tx: W / 2, ty: 170, lockX: 0, lockY: 0,
+      speed: 130 + 20 * n, charge: 520 + 40 * n, hit: 0, spin: 0,
+    };
+    S.banner = 2.4;
+  }
+
+  function pickRoamPoint(b) {
+    b.tx = rand(ROAD_L + b.w / 2, ROAD_R - b.w / 2);
+    b.ty = rand(130, 300);
+  }
+
+  function updateBoss(dt) {
+    const b = S.boss, p = S.p;
+    b.t += dt; b.spin += dt;
+    if (b.hit > 0) b.hit -= dt;
+    const moveTo = (tx, ty, sp) => {
+      const dx = tx - b.x, dy = ty - b.y, d = Math.hypot(dx, dy);
+      if (d < sp * dt) { b.x = tx; b.y = ty; return true; }
+      b.x += dx / d * sp * dt; b.y += dy / d * sp * dt;
+      return false;
+    };
+    switch (b.state) {
+      case 'enter':
+        if (moveTo(W / 2, 170, 140)) { b.state = 'roam'; b.t = 0; b.next = rand(2.5, 4); pickRoamPoint(b); }
+        break;
+      case 'roam':
+        if (moveTo(b.tx, b.ty, b.speed)) pickRoamPoint(b);
+        if (b.t > b.next) { b.state = 'windup'; b.t = 0; sfx('jump'); }
+        break;
+      case 'windup':
+        // shakes in place, then locks on to where you are
+        b.x += Math.sin(b.t * 60) * 1.5;
+        if (b.t > 0.8) { b.state = 'charge'; b.t = 0; b.lockX = p.x; b.lockY = Math.min(p.y + 40, H - 120); sfx('missile'); }
+        break;
+      case 'charge':
+        if (moveTo(b.lockX, b.lockY, b.charge) || b.t > 1.4) { b.state = 'return'; b.t = 0; }
+        break;
+      case 'return':
+        if (moveTo(b.x, 170, 220)) { b.state = 'roam'; b.t = 0; b.next = rand(3, 5.5) - Math.min(1.5, 0.3 * b.n); pickRoamPoint(b); }
+        break;
+    }
+    b.x = clamp(b.x, ROAD_L + b.w / 2 - 20, ROAD_R - b.w / 2 + 20);
+
+    // touching the boss: 30% of your armour, or 60% of your health if you have no armour
+    const hb = { x: p.x, y: p.y, w: 20, h: 50 };
+    const body = { x: b.x, y: b.y, w: b.w - 20, h: b.h - 16 };
+    if (b.state !== 'enter' && p.inv <= 0 && overlap(hb, body)) {
+      bossTouch();
+      b.state = 'return'; b.t = 0;
+    }
+    for (const t of S.turrets) {
+      if (t.hp > 0 && (t.bossCd || 0) <= 0 && overlap(t, body)) {
+        t.hp -= Math.round(t.maxHp * 0.4); t.hit = 0.15; t.bossCd = 1;
+        if (t.hp <= 0) burst(t.x, t.y, '#9be15d', 30, 220, 3);
+      }
+      if (t.bossCd > 0) t.bossCd -= dt;
+    }
+    S.turrets = S.turrets.filter(t => t.hp > 0);
+  }
+
+  function bossTouch() {
+    const p = S.p;
+    p.inv = 1.5;
+    S.shake = 18;
+    sfx('hurt');
+    if (S.armour > 0) {
+      const loss = Math.min(S.armour, Math.round(ARMOUR_CAP * 0.3));
+      S.armour -= loss;
+      S.floaters.push({ x: p.x, y: p.y - 40, txt: 'ARMOUR -' + loss, color: '#8fb8ff', life: 1.2, max: 1.2, big: true });
+    } else {
+      const loss = Math.round(p.maxHp * 0.6);
+      p.hp -= loss;
+      S.floaters.push({ x: p.x, y: p.y - 40, txt: '-' + loss, color: '#ff6b6b', life: 1.2, max: 1.2, big: true });
+      if (p.hp <= 0) die();
+    }
+  }
+
+  function killBoss(b) {
+    S.score += b.maxHp;
+    S.points += b.maxHp;
+    S.kills++;
+    for (let i = 0; i < 6; i++) {
+      setTimeout(() => { burst(b.x + rand(-60, 60), b.y + rand(-40, 40), i % 2 ? '#ff3d6e' : '#ffd166', 40, 300, 4); sfx('bigboom'); }, i * 140);
+    }
+    S.shake = 20;
+    S.floaters.push({ x: b.x, y: b.y, txt: '+' + b.maxHp.toLocaleString('en-GB'), color: '#ffd166', life: 2, max: 2, big: true });
+    for (let i = 0; i < 4; i++) spawnBox(b.x + (i - 1.5) * 34, b.y);
+    S.boss = null;
+    S.level++;
+    S.levelT = 0;
+    S.banner = 2.4;
+    setTimeout(() => sfx('level'), 900);
+  }
+
+  // laser: replaces the gun during boss fights, a beam that hits the first thing in line
+  function laserDps() {
+    return Math.max(300, 2 * S.rate * S.shot * BULLET_DMG * POWER_STEPS[S.power]);
+  }
+  function fireLaser(dt) {
+    const p = S.p, x0 = p.x, y0 = p.y - 32;
+    let hit = null, hitY = -20;
+    for (const e of targetList()) {
+      if (e.dead || e.y > y0) continue;
+      const half = e.isBoss ? e.w / 2 - 14 : e.w / 2;
+      if (Math.abs(e.x - x0) > half) continue;
+      const bottom = e.y + e.h / 2;
+      if (bottom > hitY) { hitY = Math.min(bottom, y0); hit = e; }
+    }
+    S.laser = { x: x0, y0, y1: hitY };
+    if (hit) {
+      damageTarget(hit, laserDps() * dt, 0);
+      if (Math.random() < 0.5) S.parts.push({ x: x0 + rand(-6, 6), y: hitY, vx: rand(-120, 120), vy: rand(-40, 60), life: 0.3, max: 0.3, color: '#ff9ce6', size: 2.5 });
+    }
+    S.laserSfx -= dt;
+    if (S.laserSfx <= 0) { tone(140, 0.14, 'sawtooth', 0.025, 30); S.laserSfx = 0.12; }
+  }
+
+  // light saber: F, boss fights only
+  function trySaber() {
+    if (mode !== 'play') return;
+    if (!S.boss) {
+      S.floaters.push({ x: S.p.x, y: S.p.y - 50, txt: 'SABER: BOSS FIGHTS ONLY', color: '#9a9cc4', life: 0.8, max: 0.8 });
+      return;
+    }
+    if (S.saberCd > 0) return;
+    S.saberT = 0.25; S.saberCd = 0.45;
+    noise(0.2, 0.08, 3000); tone(520, 0.18, 'sawtooth', 0.04, -300);
+    const p = S.p, dmg = 400 * POWER_STEPS[S.power];
+    for (const e of targetList()) {
+      if (e.dead) continue;
+      const dx = Math.max(0, Math.abs(e.x - p.x) - e.w / 2);
+      const dy = Math.max(0, Math.abs(e.y - p.y) - e.h / 2);
+      if (Math.hypot(dx, dy) < SABER_RANGE) {
+        burst(e.x + clamp(p.x - e.x, -e.w / 2, e.w / 2), e.y + e.h / 2 - 4, '#bff4ff', 18, 220, 2.5);
+        S.floaters.push({ x: e.x, y: e.y + e.h / 2, txt: '-' + dmg, color: '#bff4ff', life: 0.8, max: 0.8, big: true });
+        damageTarget(e, dmg, 0.15);
+      }
+    }
+  }
+
   // ---------- update ----------
   function update(dt) {
     S.t += dt;
     const L = S.level;
-    const roadSpeed = 330 + L * 14;
+    const roadSpeed = 330 + Math.min(L, 30) * 10;
     S.roadOff = (S.roadOff + roadSpeed * dt) % 80;
     S.sideOff = (S.sideOff + roadSpeed * dt) % 160;
     if (S.banner > 0) S.banner -= dt;
@@ -697,12 +872,13 @@
 
     const alive = mode === 'play';
     if (alive) {
-      S.levelT += dt;
+      if (!S.boss) S.levelT += dt;
       if (S.levelT >= LEVEL_TIME) {
-        S.levelT -= LEVEL_TIME;
+        S.levelT = 0;
         S.level++;
         S.banner = 2.4;
         sfx('level');
+        if (isBossLevel(S.level)) startBoss();
       }
     }
 
@@ -719,11 +895,13 @@
 
       // gun
       S.fireCd = Math.max(-0.001, S.fireCd - dt);
-      if (keys.fire && S.fireCd <= 0) {
+      S.laser = null;
+      if (S.boss && keys.fire) fireLaser(dt);
+      else if (keys.fire && S.fireCd <= 0) {
         const n = S.shot;
         for (let i = 0; i < n; i++) {
           const off = i - (n - 1) / 2;
-          S.bullets.push({ x: p.x + off * 9, y: p.y - 34, vx: off * 70, vy: -760, w: 4, h: 12 });
+          S.bullets.push({ x: p.x + off * 9, y: p.y - 34, vx: off * 70, vy: -760, w: 4, h: 12, dmg: BULLET_DMG * POWER_STEPS[S.power] });
         }
         S.fireCd = 1 / S.rate;
         sfx('shot');
@@ -736,10 +914,13 @@
       } else S.mReload = MISSILE_RELOAD;
 
       // spawns
+      if (S.saberT > 0) S.saberT -= dt;
+      if (S.saberCd > 0) S.saberCd -= dt;
+      if (S.boss) updateBoss(dt);
       S.spawnT -= dt;
-      if (S.spawnT <= 0) {
+      if (S.spawnT <= 0 && !S.boss) {
         spawnWave();
-        S.spawnT = Math.max(0.5, 2.0 - L * 0.13) * rand(0.75, 1.25);
+        S.spawnT = Math.max(0.55, 2.2 - L * 0.08) * rand(0.75, 1.25);
       }
       // box turrets ride ahead of the bike, bought turrets ride behind it
       const OFFS = [[0], [-28, 28], [-40, 0, 40]];
@@ -768,7 +949,7 @@
         if (t.heat >= TURRET_FIRE_TIME) { t.cool = TURRET_COOL_TIME; return; }
         // aim at the nearest enemy ahead, within a forward arc
         let tgt = null, bd = Infinity;
-        for (const e of S.enemies) {
+        for (const e of targetList()) {
           if (e.dead || e.y > t.y || e.y < -e.h / 2) continue;
           const d = Math.hypot(e.x - t.x, e.y - t.y);
           if (d < bd) { bd = d; tgt = e; }
@@ -789,7 +970,7 @@
     for (const r of S.rockets) {
       if (!r.target || r.target.dead) {
         let bestD = Infinity; r.target = null;
-        for (const e of S.enemies) {
+        for (const e of targetList()) {
           if (e.dead || e.y > r.y + 20 || e.y < -e.h) continue;
           const d = Math.hypot(e.x - r.x, e.y - r.y);
           if (d < bestD) { bestD = d; r.target = e; }
@@ -841,13 +1022,12 @@
     // bullet hits
     for (const b of S.bullets) {
       if (b.dead) continue;
-      for (const e of S.enemies) {
+      for (const e of targetList()) {
         if (e.dead) continue;
         if (Math.abs(b.x - e.x) < e.w / 2 && Math.abs(b.y - e.y) < e.h / 2) {
           b.dead = true;
-          e.hp -= BULLET_DMG; e.hit = 0.07;
+          damageTarget(e, b.dmg || BULLET_DMG, 0.07);
           burst(b.x, b.y, '#bff4ff', 4, 120, 1.6);
-          if (e.hp <= 0 && !e.dead) { e.dead = true; killEnemy(e); }
           break;
         }
       }
@@ -855,17 +1035,16 @@
     // rocket hits
     for (const r of S.rockets) {
       if (r.dead) continue;
-      for (const e of S.enemies) {
+      for (const e of targetList()) {
         if (e.dead) continue;
         if (Math.abs(r.x - e.x) < e.w / 2 + 4 && Math.abs(r.y - e.y) < e.h / 2 + 4) {
           r.dead = true;
-          e.hp -= r.dmg; e.hit = 0.12;
+          damageTarget(e, r.dmg, 0.12);
           burst(r.x, r.y, '#ffb347', 24, 240, 3);
           burst(r.x, r.y, '#ffffff', 10, 160, 2);
           S.shake = Math.max(S.shake, 6);
           S.floaters.push({ x: r.x, y: r.y - 10, txt: '-' + r.dmg, color: '#ffb347', life: 0.8, max: 0.8 });
           sfx('boom');
-          if (e.hp <= 0 && !e.dead) { e.dead = true; killEnemy(e); }
           break;
         }
       }
@@ -1049,6 +1228,100 @@
     // tail light
     ctx.fillStyle = '#ff4d5e';
     ctx.fillRect(-4, 22, 8, 3);
+    ctx.restore();
+  }
+
+  function drawBoss(b) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    ctx.beginPath(); ctx.ellipse(10, 24, b.w * 0.5, b.h * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+    const wind = b.state === 'windup' && Math.floor(b.t * 16) % 2 === 0;
+    // wings
+    ctx.fillStyle = '#5a0f2a';
+    ctx.beginPath();
+    ctx.moveTo(-b.w / 2, -10); ctx.lineTo(-b.w / 2 + 26, -b.h / 2 + 6); ctx.lineTo(-30, -b.h / 2 + 20);
+    ctx.lineTo(30, -b.h / 2 + 20); ctx.lineTo(b.w / 2 - 26, -b.h / 2 + 6); ctx.lineTo(b.w / 2, -10);
+    ctx.lineTo(b.w / 2 - 18, b.h / 2 - 8); ctx.lineTo(-b.w / 2 + 18, b.h / 2 - 8);
+    ctx.closePath(); ctx.fill();
+    // hull
+    ctx.fillStyle = b.hit > 0 || wind ? '#ffffff' : '#ff3d6e';
+    ctx.beginPath();
+    ctx.moveTo(0, -b.h / 2); ctx.lineTo(44, -b.h / 2 + 22); ctx.lineTo(52, 14); ctx.lineTo(22, b.h / 2);
+    ctx.lineTo(-22, b.h / 2); ctx.lineTo(-52, 14); ctx.lineTo(-44, -b.h / 2 + 22);
+    ctx.closePath(); ctx.fill();
+    // side cannons
+    ctx.fillStyle = '#2a0714';
+    rr(-b.w / 2 + 8, -4, 16, 40, 5); ctx.fill();
+    rr(b.w / 2 - 24, -4, 16, 40, 5); ctx.fill();
+    // core
+    const pulse = 0.5 + 0.5 * Math.sin(b.spin * 6);
+    const g = ctx.createRadialGradient(0, 4, 2, 0, 4, 30);
+    g.addColorStop(0, '#fff3c4');
+    g.addColorStop(0.4, `rgba(255,209,102,${0.7 + 0.3 * pulse})`);
+    g.addColorStop(1, 'rgba(255,61,110,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 4, 30, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#2a0714'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 4, 17, b.spin * 2, b.spin * 2 + Math.PI * 1.4); ctx.stroke();
+    // warning glyph during windup
+    if (b.state === 'windup') {
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '22px "Bungee", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('!', 0, b.h / 2 + 22);
+    }
+    ctx.restore();
+  }
+
+  function drawBossBar(b) {
+    const x = 14, y = 64, w = W - 28;
+    ctx.fillStyle = 'rgba(12,13,30,.85)';
+    rr(x, y, w, 20, 5); ctx.fill();
+    ctx.fillStyle = '#ff3d6e';
+    rr(x + 2, y + 2, Math.max(0, (w - 4) * b.hp / b.maxHp), 16, 4); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 11px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('WARLORD ' + b.n, x + 8, y + 10.5);
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.ceil(b.hp).toLocaleString('en-GB') + ' / ' + b.maxHp.toLocaleString('en-GB'), x + w - 8, y + 10.5);
+  }
+
+  function drawLaser(l) {
+    const flick = 0.75 + Math.random() * 0.25;
+    ctx.save();
+    ctx.globalAlpha = 0.35 * flick;
+    ctx.fillStyle = '#ff7ad9';
+    ctx.fillRect(l.x - 7, l.y1, 14, l.y0 - l.y1);
+    ctx.globalAlpha = flick;
+    ctx.fillStyle = '#ffd6f5';
+    ctx.fillRect(l.x - 2.5, l.y1, 5, l.y0 - l.y1);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(l.x, l.y1, 7 * flick, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSaber(p) {
+    const prog = 1 - S.saberT / 0.25;
+    const a0 = -Math.PI * 0.95, a1 = -Math.PI * 0.05;
+    const a = a0 + (a1 - a0) * prog;
+    const cx = p.x, cy = p.y - 6, r = SABER_RANGE;
+    ctx.save();
+    // swept trail
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(191,244,255,.18)';
+    ctx.lineWidth = r * 0.3;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.7, a0, a); ctx.stroke();
+    ctx.lineCap = 'round';
+    // blade
+    ctx.strokeStyle = 'rgba(94,224,255,.55)';
+    ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
+    ctx.strokeStyle = '#f2fdff';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
     ctx.restore();
   }
 
@@ -1238,7 +1511,7 @@
     rr(W / 2 - 50, 34, 100 * (S.levelT / LEVEL_TIME), 6, 3); ctx.fill();
     ctx.fillStyle = '#9a9cc4';
     ctx.font = '600 9px "Chakra Petch", sans-serif';
-    ctx.fillText(Math.ceil(LEVEL_TIME - S.levelT) + 's left', W / 2, 51);
+    ctx.fillText(S.boss ? 'BOSS FIGHT' : Math.ceil(LEVEL_TIME - S.levelT) + 's left', W / 2, 51);
 
     // score
     ctx.textAlign = 'right';
@@ -1269,7 +1542,7 @@
     ctx.fillText(S.rate + '/s', 46, py + 30);
     ctx.fillStyle = '#9a9cc4';
     ctx.font = '600 9px "Chakra Petch", sans-serif';
-    ctx.fillText('20 DMG', 88, py + 30);
+    ctx.fillText((BULLET_DMG * POWER_STEPS[S.power]) + ' DMG', 88, py + 30);
 
     // missiles
     const mx = 170;
@@ -1304,8 +1577,9 @@
 
   function unlockText(L) {
     if (L === 2) return 'Haulers join · 200 HP';
-    if (L === 3) return 'Armour joins · 500 HP';
-    if (L === 5) return 'Juggernauts (1000 HP) · turret boxes unlocked';
+    if (L === 4) return 'Armour joins · 500 HP';
+    if (L === 5) return 'Turret boxes unlocked';
+    if (L === 6) return 'Juggernauts join · 1000 HP';
     if (L === 7) return 'Turret upgrades: fire rate + missiles';
     if (L === 9) return 'Armour unlocked: boxes and shop';
     return 'More traffic, faster';
@@ -1317,6 +1591,8 @@
     drawRoad();
     for (const b of S.boxes) drawBox(b);
     for (const e of S.enemies) drawEnemy(e);
+    if (S.boss) drawBoss(S.boss);
+    if (S.laser) drawLaser(S.laser);
     // bullets
     ctx.fillStyle = '#bff4ff';
     for (const b of S.bullets) {
@@ -1352,6 +1628,7 @@
     }
     for (const t of S.turrets) drawTurret(t);
     if (mode !== 'dying' && mode !== 'over') drawBike(S.p);
+    if (S.saberT > 0) drawSaber(S.p);
     // particles
     for (const q of S.parts) {
       ctx.globalAlpha = Math.max(0, q.life / q.max);
@@ -1371,6 +1648,7 @@
     ctx.restore();
 
     if (mode !== 'menu') drawHUD();
+    if (S.boss && mode !== 'menu') drawBossBar(S.boss);
 
     // level banner
     if (mode === 'play' && S.banner > 0) {
@@ -1386,7 +1664,7 @@
       ctx.fillText('LEVEL ' + S.level, W / 2, H / 2 - 18);
       ctx.fillStyle = '#eef0ff';
       ctx.font = '600 14px "Chakra Petch", sans-serif';
-      ctx.fillText(S.level === 1 ? 'Survive 30 seconds · Scouts ahead' : unlockText(S.level), W / 2, H / 2 + 24);
+      ctx.fillText(S.level === 1 ? 'Survive 30 seconds · Scouts ahead' : S.boss ? 'BOSS · W laser · F saber · dodge its charge' : unlockText(S.level), W / 2, H / 2 + 24);
       ctx.globalAlpha = 1;
     }
   }
@@ -1404,6 +1682,7 @@
         <dt><kbd>Tab</kbd></dt><dd>Jump over traffic (10% damage, not 25%)</dd>
         <dt><kbd>W</kbd></dt><dd>Fire gun, hold for auto (20 dmg)</dd>
         <dt><kbd>E</kbd></dt><dd>Homing missile (100 dmg)</dd>
+        <dt><kbd>F</kbd></dt><dd>Light saber, boss fights (W becomes a laser)</dd>
         <dt><kbd>B</kbd></dt><dd>Points shop</dd>
         <dt><kbd>P</kbd></dt><dd>Pause</dd>
       </dl>
@@ -1484,7 +1763,7 @@
         }).join('')}
       </div>
       <div class="row"><button class="primary" id="closeShopBtn">Back to the road</button></div>
-      <p class="note">Press 1–8 to buy, B or Esc to close.</p>`;
+      <p class="note">Press 1–9 to buy, B or Esc to close.</p>`;
     card.querySelectorAll('.shopitem').forEach(b => b.onclick = () => buyItem(parseInt(b.dataset.i, 10)));
     document.getElementById('closeShopBtn').onclick = closeShop;
     document.getElementById('closeShopBtn').focus({ preventScroll: true });
